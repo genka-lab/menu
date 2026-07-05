@@ -111,6 +111,7 @@ h2.sec{font-size:15px;color:var(--navy);margin:4px 0 12px;display:flex;align-ite
 
 <!-- ========== メニュー一覧 ========== -->
 <div id="tab-list" class="wrap">
+  <button class="btn sub" id="exportBtn" style="margin-top:0;margin-bottom:12px" onclick="exportCSV()">📊 エクセル(CSV)で出力</button>
   <div id="itemList"></div>
   <div id="emptyMsg" class="empty">
     まだメニューがありません。<br>下の「＋ メニューを追加」から登録してください。
@@ -235,7 +236,8 @@ function save(){localStorage.setItem('izakaya_items_v2',JSON.stringify(items));}
 function ingCost(g){ // 1食あたり原価(税込)
   const tax=1+(+g.taxrate||0)/100;
   if((g.mode||'split')==='direct'){ // 1食あたりを直接入力(単位合わせ不要)
-    return (+g.direct||0)*tax;
+    const amt=+g.direct||0, dt=g.dtax??'incl';
+    return dt==='incl'? amt : amt*(1+(+dt||0)/100); // incl=税込そのまま / 数値=税抜き率
   }
   const gross=(+g.cost||0)*tax;
   return (+g.qty>0)? gross*(+g.use||0)/(+g.qty):0;
@@ -255,6 +257,7 @@ function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>
 function render(){
   const box=document.getElementById('itemList');
   document.getElementById('emptyMsg').style.display=items.length?'none':'block';
+  document.getElementById('exportBtn').style.display=items.length?'block':'none';
   box.innerHTML='';
   items.forEach((it,i)=>{
     const c=calc(it);
@@ -288,14 +291,22 @@ function taxSelHTML(idx,g){
     <option value="10" ${g.taxrate==10?'selected':''}>10%</option>
     <option value="0" ${g.taxrate==0?'selected':''}>0%</option></select>`;
 }
+function dtaxSelHTML(idx,g){
+  const dt=g.dtax??'incl';
+  return `<select onchange="updIng(${idx},'dtax',this.value)">
+    <option value="incl" ${dt=='incl'?'selected':''}>税込(そのまま)</option>
+    <option value="8" ${dt=='8'?'selected':''}>税抜8%</option>
+    <option value="10" ${dt=='10'?'selected':''}>税抜10%</option>
+    <option value="0" ${dt=='0'?'selected':''}>税抜0%</option></select>`;
+}
 function ingRowHTML(idx,g){
   const mode=g.mode||'split';
   const body = mode==='direct' ? `
     <div class="row2">
-      <div><label>1食あたり仕入額(税抜)</label><input type="number" inputmode="decimal" placeholder="120" value="${g.direct??''}" oninput="updIng(${idx},'direct',this.value)"></div>
-      <div><label>税率</label>${taxSelHTML(idx,g)}</div>
+      <div><label>1食あたり原価</label><input type="number" inputmode="decimal" placeholder="120" value="${g.direct??''}" oninput="updIng(${idx},'direct',this.value)"></div>
+      <div><label>税区分</label>${dtaxSelHTML(idx,g)}</div>
     </div>
-    <div class="note">仕入れが1食・1パック単位で、1食分の金額が分かる食材向け（単位を合わせる必要なし）</div>`
+    <div class="note">仕入れが1食・1パック単位の食材向け。税込金額はそのまま「税込」を選択（単位合わせ不要）</div>`
   : `
     <div class="row2">
       <div><label>仕入価格(税抜)</label><input type="number" inputmode="decimal" placeholder="1000" value="${g.cost??''}" oninput="updIng(${idx},'cost',this.value)"></div>
@@ -325,10 +336,10 @@ function renderIngs(){
   document.getElementById('ingContainer').innerHTML=draftIngs.map((g,i)=>ingRowHTML(i,g)).join('');
   recalcForm();
 }
-function addIngRow(){draftIngs.push({food:'',cost:'',taxrate:8,qty:'',unit:'g',use:'',mode:'split',direct:''});renderIngs();}
+function addIngRow(){draftIngs.push({food:'',cost:'',taxrate:8,qty:'',unit:'g',use:'',mode:'split',direct:'',dtax:'incl'});renderIngs();}
 function removeIngRow(i){draftIngs.splice(i,1);if(draftIngs.length===0)addIngRow();else renderIngs();}
 function updIngMode(i,v){draftIngs[i].mode=v;renderIngs();}
-function updIng(i,k,v){draftIngs[i][k]=(k==='food'||k==='unit')?v:(+v||0);
+function updIng(i,k,v){draftIngs[i][k]=(k==='food'||k==='unit'||k==='dtax')?v:(+v||0);
   // 原価表示だけ更新(再描画で入力フォーカスが飛ぶのを防ぐ)
   const card=document.querySelector(`.ingcard[data-idx="${i}"] .subcost b`);
   if(card)card.textContent=yen(ingCost(draftIngs[i]));
@@ -352,7 +363,7 @@ function openForm(i){
     draftIngs=JSON.parse(JSON.stringify(it.ings));
   }else{
     f_menu.value='';f_price.value='';
-    draftIngs=[{food:'',cost:'',taxrate:8,qty:'',unit:'g',use:'',mode:'split',direct:''}];
+    draftIngs=[{food:'',cost:'',taxrate:8,qty:'',unit:'g',use:'',mode:'split',direct:'',dtax:'incl'}];
   }
   renderIngs();showPage('form');
 }
@@ -387,6 +398,40 @@ function calcTax(){const net=+c_net.value||0,r=+c_rate1.value,g=net*(1+r/100);
   c_gross.textContent=yen(g);c_tax.textContent=yen(g-net);}
 function calcTax2(){const g=+c_gross2.value||0,r=+c_rate2.value,net=g/(1+r/100);
   c_net2.textContent=yen(net);c_tax2.textContent=yen(g-net);}
+
+/* ---- エクセル(CSV)出力 ---- */
+function csvCell(s){s=String(s??'');return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;}
+function exportCSV(){
+  if(!items.length){alert('メニューがありません');return;}
+  const rows=[];
+  rows.push(['居酒屋メニュー 原価計算']);
+  rows.push([]);
+  rows.push(['■ メニュー一覧']);
+  rows.push(['メニュー名','売価(税込)','合計原価(税込)','粗利','原価率(%)']);
+  items.forEach(it=>{const c=calc(it);
+    rows.push([it.menu,Math.round(it.price),Math.round(c.unitCost),Math.round(c.profit),c.rate.toFixed(1)]);});
+  rows.push([]);
+  rows.push(['■ 食材明細']);
+  rows.push(['メニュー名','食材','数量','入力方法','1食原価(税込)']);
+  items.forEach(it=>{it.ings.forEach(g=>{
+    const q=(g.mode==='direct')?'1食分':`${g.use}${g.unit}`;
+    const m=(g.mode==='direct')?'1食あたり直接':'按分';
+    rows.push([it.menu,g.food||'',q,m,Math.round(ingCost(g))]);});});
+  rows.push([]);
+  rows.push(['■ 割引価格と粗利']);
+  const head=['メニュー名','通常売価'];
+  DISCOUNTS.forEach(d=>head.push(d+'%引 価格',d+'%引 粗利'));
+  rows.push(head);
+  items.forEach(it=>{const c=calc(it),r=[it.menu,Math.round(it.price)];
+    c.disc.forEach(x=>{r.push(Math.round(x.price),Math.round(x.profit));});rows.push(r);});
+  const csv=rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const d=new Date(),p=n=>String(n).padStart(2,'0');
+  const fn=`居酒屋メニュー原価_${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}.csv`;
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download=fn;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+}
 
 render();calcTax();calcTax2();
 </script>
