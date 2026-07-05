@@ -233,7 +233,11 @@ function save(){localStorage.setItem('izakaya_items_v2',JSON.stringify(items));}
 
 /* ---- 計算 ---- */
 function ingCost(g){ // 1食あたり原価(税込)
-  const gross=(+g.cost||0)*(1+(+g.taxrate||0)/100);
+  const tax=1+(+g.taxrate||0)/100;
+  if((g.mode||'split')==='direct'){ // 1食あたりを直接入力(単位合わせ不要)
+    return (+g.direct||0)*tax;
+  }
+  const gross=(+g.cost||0)*tax;
   return (+g.qty>0)? gross*(+g.use||0)/(+g.qty):0;
 }
 function calc(it){
@@ -256,7 +260,8 @@ function render(){
     const c=calc(it);
     let iglist='';
     it.ings.forEach(g=>{
-      iglist+=`<div class="ig"><span>${esc(g.food||'食材')}（${g.use}${g.unit}）</span><b>${yen(ingCost(g))}</b></div>`;
+      const q=(g.mode==='direct')?'1食分':`${g.use}${g.unit}`;
+      iglist+=`<div class="ig"><span>${esc(g.food||'食材')}（${q}）</span><b>${yen(ingCost(g))}</b></div>`;
     });
     let rows='';
     c.disc.forEach(x=>{rows+=`<tr><td>${x.d}%引</td><td class="price">${yen(x.price)}</td><td class="${x.profit<0?'neg':''}">${yen(x.profit)}</td></tr>`;});
@@ -277,25 +282,42 @@ function render(){
 
 /* ---- フォーム(食材が動的) ---- */
 let draftIngs=[];
+function taxSelHTML(idx,g){
+  return `<select onchange="updIng(${idx},'taxrate',this.value)">
+    <option value="8" ${g.taxrate==8?'selected':''}>8%</option>
+    <option value="10" ${g.taxrate==10?'selected':''}>10%</option>
+    <option value="0" ${g.taxrate==0?'selected':''}>0%</option></select>`;
+}
 function ingRowHTML(idx,g){
-  return `<div class="ingcard" data-idx="${idx}">
-    <div class="ightitle">食材 ${idx+1}</div>
-    <button class="ingdel" onclick="removeIngRow(${idx})">削除</button>
-    <label>食材名</label>
-    <input placeholder="例：鶏もも肉" value="${esc(g.food||'')}" oninput="updIng(${idx},'food',this.value)">
+  const mode=g.mode||'split';
+  const body = mode==='direct' ? `
+    <div class="row2">
+      <div><label>1食あたり仕入額(税抜)</label><input type="number" inputmode="decimal" placeholder="120" value="${g.direct??''}" oninput="updIng(${idx},'direct',this.value)"></div>
+      <div><label>税率</label>${taxSelHTML(idx,g)}</div>
+    </div>
+    <div class="note">仕入れが1食・1パック単位で、1食分の金額が分かる食材向け（単位を合わせる必要なし）</div>`
+  : `
     <div class="row2">
       <div><label>仕入価格(税抜)</label><input type="number" inputmode="decimal" placeholder="1000" value="${g.cost??''}" oninput="updIng(${idx},'cost',this.value)"></div>
-      <div><label>税率</label><select onchange="updIng(${idx},'taxrate',this.value)">
-        <option value="8" ${g.taxrate==8?'selected':''}>8%</option>
-        <option value="10" ${g.taxrate==10?'selected':''}>10%</option>
-        <option value="0" ${g.taxrate==0?'selected':''}>0%</option></select></div>
+      <div><label>税率</label>${taxSelHTML(idx,g)}</div>
     </div>
     <div class="row3">
       <div><label>仕入れ量</label><input type="number" inputmode="decimal" placeholder="1000" value="${g.qty??''}" oninput="updIng(${idx},'qty',this.value)"></div>
       <div><label>単位</label><select onchange="updIng(${idx},'unit',this.value)">
         ${['g','kg','ml','個','本','食','パック','袋','枚'].map(u=>`<option ${g.unit==u?'selected':''}>${u}</option>`).join('')}</select></div>
       <div><label>1食使用量</label><input type="number" inputmode="decimal" placeholder="150" value="${g.use??''}" oninput="updIng(${idx},'use',this.value)"></div>
-    </div>
+    </div>`;
+  return `<div class="ingcard" data-idx="${idx}">
+    <div class="ightitle">食材 ${idx+1}</div>
+    <button class="ingdel" onclick="removeIngRow(${idx})">削除</button>
+    <label>食材名</label>
+    <input placeholder="例：鶏もも肉" value="${esc(g.food||'')}" oninput="updIng(${idx},'food',this.value)">
+    <label>入力方法</label>
+    <select onchange="updIngMode(${idx},this.value)">
+      <option value="split" ${mode==='split'?'selected':''}>仕入量から按分（g・個など）</option>
+      <option value="direct" ${mode==='direct'?'selected':''}>1食あたりを直接入力</option>
+    </select>
+    ${body}
     <div class="subcost"><span>この食材の1食原価(税込)</span><b>${yen(ingCost(g))}</b></div>
   </div>`;
 }
@@ -303,8 +325,9 @@ function renderIngs(){
   document.getElementById('ingContainer').innerHTML=draftIngs.map((g,i)=>ingRowHTML(i,g)).join('');
   recalcForm();
 }
-function addIngRow(){draftIngs.push({food:'',cost:'',taxrate:8,qty:'',unit:'g',use:''});renderIngs();}
+function addIngRow(){draftIngs.push({food:'',cost:'',taxrate:8,qty:'',unit:'g',use:'',mode:'split',direct:''});renderIngs();}
 function removeIngRow(i){draftIngs.splice(i,1);if(draftIngs.length===0)addIngRow();else renderIngs();}
+function updIngMode(i,v){draftIngs[i].mode=v;renderIngs();}
 function updIng(i,k,v){draftIngs[i][k]=(k==='food'||k==='unit')?v:(+v||0);
   // 原価表示だけ更新(再描画で入力フォーカスが飛ぶのを防ぐ)
   const card=document.querySelector(`.ingcard[data-idx="${i}"] .subcost b`);
@@ -329,14 +352,14 @@ function openForm(i){
     draftIngs=JSON.parse(JSON.stringify(it.ings));
   }else{
     f_menu.value='';f_price.value='';
-    draftIngs=[{food:'',cost:'',taxrate:8,qty:'',unit:'g',use:''}];
+    draftIngs=[{food:'',cost:'',taxrate:8,qty:'',unit:'g',use:'',mode:'split',direct:''}];
   }
   renderIngs();showPage('form');
 }
 function saveItem(){
   const menu=f_menu.value.trim();
   if(!menu){alert('メニュー名を入れてください');return;}
-  const ings=draftIngs.filter(g=>g.food||g.cost||g.use);
+  const ings=draftIngs.filter(g=>g.food||g.cost||g.use||g.direct);
   if(ings.length===0){alert('食材を1つ以上入れてください');return;}
   const it={menu,price:+f_price.value||0,ings};
   if(editIndex>=0)items[editIndex]=it;else items.push(it);
