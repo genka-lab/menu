@@ -60,6 +60,18 @@ td.price{font-weight:700}
 .hide{display:none}
 .note{font-size:11px;color:var(--sub);margin-top:4px}
 h2.sec{font-size:15px;color:var(--navy);margin:4px 0 12px;display:flex;align-items:center;gap:6px}
+/* --- 合言葉ロック --- */
+.gate{position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,var(--navy),var(--blue));
+  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;color:#fff}
+.gate .box{width:100%;max-width:340px;background:#fff;border-radius:18px;padding:26px 22px;color:var(--ink);
+  box-shadow:0 12px 40px rgba(0,0,0,.3);text-align:center}
+.gate .lock{font-size:40px;margin-bottom:6px}
+.gate h2{margin:0 0 4px;font-size:19px;color:var(--navy)}
+.gate p{margin:0 0 16px;font-size:12px;color:var(--sub)}
+.gate input{text-align:center;font-size:18px;letter-spacing:2px}
+.gate .err{color:var(--red);font-size:13px;font-weight:700;margin-top:10px;min-height:18px}
+.lockbtn{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);
+  color:#fff;border-radius:10px;font-size:12px;font-weight:700;padding:6px 10px}
 .ingcard{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:10px;position:relative}
 .ingcard .ightitle{font-size:12px;font-weight:700;color:var(--blue);margin-bottom:4px}
 .ingdel{position:absolute;top:8px;right:8px;background:#fff;border:1.5px solid var(--red);color:var(--red);
@@ -72,7 +84,22 @@ h2.sec{font-size:15px;color:var(--navy);margin:4px 0 12px;display:flex;align-ite
 </style>
 </head>
 <body>
+
+<!-- ========== 合言葉ロック画面 ========== -->
+<div id="gate" class="gate">
+  <div class="box">
+    <div class="lock">🔒</div>
+    <h2>合言葉を入力</h2>
+    <p>このアプリはお店の関係者専用です</p>
+    <input id="gate_pw" type="password" inputmode="text" placeholder="合言葉" autocomplete="off"
+      onkeydown="if(event.key==='Enter')tryUnlock()">
+    <button class="btn" onclick="tryUnlock()">はいる</button>
+    <div class="err" id="gate_err"></div>
+  </div>
+</div>
+
 <header>
+  <button class="lockbtn" onclick="relock()">🔒 ロック</button>
   <h1>🏮 居酒屋メニュー計算</h1>
   <p>複数食材の合算原価・税込・割引価格・利益を計算</p>
 </header>
@@ -145,6 +172,37 @@ h2.sec{font-size:15px;color:var(--navy);margin:4px 0 12px;display:flex;align-ite
 <button id="fab" class="fab" onclick="openForm()">＋ メニューを追加</button>
 
 <script>
+/* ============ 合言葉ロック ============ */
+/* 合言葉のSHA-256ハッシュ(本文に平文は書かない)。現在の仮合言葉: menu2026 */
+const PW_HASH="52c7c485d8dd2e0f708c8b2d116225fb8abdc21dd08ad6afcd6de0c85e60401e";
+async function sha256(str){
+  const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+async function tryUnlock(){
+  const pw=document.getElementById("gate_pw").value;
+  const err=document.getElementById("gate_err");
+  if(!pw){err.textContent="合言葉を入れてください";return;}
+  const h=await sha256(pw);
+  if(h===PW_HASH){
+    localStorage.setItem("izakaya_unlocked",PW_HASH); // ハッシュ変更時は自動で再ロックされる
+    document.getElementById("gate").style.display="none";
+  }else{
+    err.textContent="合言葉が違います";
+    document.getElementById("gate_pw").value="";
+  }
+}
+function relock(){
+  localStorage.removeItem("izakaya_unlocked");
+  document.getElementById("gate_pw").value="";
+  document.getElementById("gate_err").textContent="";
+  document.getElementById("gate").style.display="flex";
+}
+/* 既に解除済みの端末はゲートを出さない(合言葉を変えたら再ロック) */
+if(localStorage.getItem("izakaya_unlocked")===PW_HASH){
+  document.getElementById("gate").style.display="none";
+}
+
 const DISCOUNTS=[50,40,30,20,15,10,5];
 const yen=n=>'¥'+Math.round(n).toLocaleString('ja-JP');
 let items=JSON.parse(localStorage.getItem('izakaya_items_v2')||'null');
