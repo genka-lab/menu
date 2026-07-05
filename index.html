@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1F3B57">
+<title>居酒屋メニュー計算</title>
+<style>
+:root{
+  --navy:#1F3B57; --blue:#2E5E8C; --green:#2E7D46; --orange:#C55A11;
+  --bg:#f4f6f9; --card:#ffffff; --line:#e2e8f0; --ink:#1f2933; --sub:#64748b;
+  --red:#c0392b; --redbg:#fdecea; --input:#eef4fb;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:-apple-system,"Hiragino Kaku Gothic ProN","メイリオ",sans-serif;
+  background:var(--bg);color:var(--ink);font-size:16px;line-height:1.5;padding-bottom:90px}
+header{background:linear-gradient(135deg,var(--navy),var(--blue));color:#fff;
+  padding:16px 16px 14px;position:sticky;top:0;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+header h1{margin:0;font-size:18px;font-weight:700}
+header p{margin:2px 0 0;font-size:12px;opacity:.85}
+.tabs{display:flex;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:64px;z-index:15}
+.tab{flex:1;text-align:center;padding:12px 4px;font-size:14px;font-weight:600;color:var(--sub);border-bottom:3px solid transparent}
+.tab.active{color:var(--navy);border-bottom-color:var(--navy)}
+.wrap{padding:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+label{display:block;font-size:12px;color:var(--sub);margin:10px 0 4px;font-weight:600}
+input,select{width:100%;padding:12px;font-size:16px;border:1.5px solid var(--line);border-radius:10px;
+  background:var(--input);color:var(--ink);outline:none}
+input:focus,select:focus{border-color:var(--blue);background:#fff}
+.row2{display:flex;gap:10px}.row2>div{flex:1}
+.row3{display:flex;gap:8px}.row3>div{flex:1}
+.btn{display:block;width:100%;padding:14px;font-size:16px;font-weight:700;border:none;border-radius:12px;
+  background:var(--navy);color:#fff;margin-top:14px}
+.btn.sub{background:#fff;color:var(--navy);border:1.5px solid var(--navy)}
+.btn.danger{background:#fff;color:var(--red);border:1.5px solid var(--red);margin-top:8px}
+.btn.add{background:#fff;color:var(--green);border:1.5px dashed var(--green);margin-top:10px}
+.fab{position:fixed;left:14px;right:14px;bottom:16px;z-index:30;padding:16px;font-size:17px;font-weight:700;
+  border:none;border-radius:14px;background:var(--navy);color:#fff;box-shadow:0 4px 14px rgba(31,59,87,.4)}
+.result{background:#f0f7f2;border:1px solid #cfe6d8;border-radius:12px;padding:12px;margin-top:12px}
+.result .big{display:flex;justify-content:space-between;align-items:baseline;padding:6px 0}
+.result .big b{font-size:22px;color:var(--green)}
+.result .big.neg b{color:var(--red)}
+.kv{display:flex;justify-content:space-between;font-size:14px;padding:3px 0;color:var(--sub)}
+.kv b{color:var(--ink)}
+table{width:100%;border-collapse:collapse;margin-top:10px;font-size:14px}
+th,td{padding:8px 6px;text-align:center;border-bottom:1px solid var(--line)}
+th{background:var(--orange);color:#fff;font-size:12px;font-weight:700}
+th:first-child{border-radius:8px 0 0 0}th:last-child{border-radius:0 8px 0 0}
+td.neg{color:var(--red);font-weight:700;background:var(--redbg)}
+td.price{font-weight:700}
+.rate{display:inline-block;padding:2px 8px;border-radius:20px;font-size:12px;font-weight:700}
+.rate.ok{background:#e2efda;color:#2e7d46}.rate.warn{background:#fff3cd;color:#8a6d00}.rate.bad{background:#fdecea;color:var(--red)}
+.item{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.item h3{margin:0 0 6px;font-size:17px}
+.inglist{font-size:12px;color:var(--sub);margin-bottom:6px}
+.inglist .ig{display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px dashed #eef1f5}
+.inglist .ig b{color:var(--ink);font-weight:600}
+.empty{text-align:center;color:var(--sub);padding:40px 20px;font-size:14px}
+.hide{display:none}
+.note{font-size:11px;color:var(--sub);margin-top:4px}
+h2.sec{font-size:15px;color:var(--navy);margin:4px 0 12px;display:flex;align-items:center;gap:6px}
+.ingcard{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:10px;position:relative}
+.ingcard .ightitle{font-size:12px;font-weight:700;color:var(--blue);margin-bottom:4px}
+.ingdel{position:absolute;top:8px;right:8px;background:#fff;border:1.5px solid var(--red);color:var(--red);
+  border-radius:8px;font-size:12px;font-weight:700;padding:4px 8px}
+.subcost{display:flex;justify-content:space-between;font-size:12px;color:var(--sub);margin-top:6px}
+.subcost b{color:var(--green)}
+.totalbar{display:flex;justify-content:space-between;align-items:center;background:#eef4fb;border:1px solid #cfe0f2;
+  border-radius:12px;padding:12px;margin-top:12px;font-weight:700}
+.totalbar b{font-size:18px;color:var(--navy)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🏮 居酒屋メニュー計算</h1>
+  <p>複数食材の合算原価・税込・割引価格・利益を計算</p>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-tab="list" onclick="switchTab('list')">メニュー一覧</div>
+  <div class="tab" data-tab="calc" onclick="switchTab('calc')">税込計算機</div>
+</div>
+
+<!-- ========== メニュー一覧 ========== -->
+<div id="tab-list" class="wrap">
+  <div id="itemList"></div>
+  <div id="emptyMsg" class="empty">
+    まだメニューがありません。<br>下の「＋ メニューを追加」から登録してください。
+  </div>
+</div>
+
+<!-- ========== 税込計算機 ========== -->
+<div id="tab-calc" class="wrap hide">
+  <div class="card">
+    <h2 class="sec">税抜 → 税込</h2>
+    <div class="row2">
+      <div><label>税抜き価格(円)</label><input id="c_net" type="number" inputmode="decimal" value="1000" oninput="calcTax()"></div>
+      <div><label>税率(%)</label>
+        <select id="c_rate1" onchange="calcTax()"><option value="8">8%(食材)</option><option value="10">10%(店内)</option></select>
+      </div>
+    </div>
+    <div class="result">
+      <div class="big"><span>税込み価格</span><b id="c_gross">¥1,080</b></div>
+      <div class="kv"><span>消費税額</span><b id="c_tax">¥80</b></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2 class="sec">税込 → 税抜</h2>
+    <div class="row2">
+      <div><label>税込み価格(円)</label><input id="c_gross2" type="number" inputmode="decimal" value="1080" oninput="calcTax2()"></div>
+      <div><label>税率(%)</label>
+        <select id="c_rate2" onchange="calcTax2()"><option value="8">8%(食材)</option><option value="10">10%(店内)</option></select>
+      </div>
+    </div>
+    <div class="result">
+      <div class="big"><span>税抜き価格</span><b id="c_net2">¥1,000</b></div>
+      <div class="kv"><span>消費税額</span><b id="c_tax2">¥80</b></div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== 追加/編集フォーム ========== -->
+<div id="formPage" class="wrap hide">
+  <div class="card">
+    <h2 class="sec" id="formTitle">＋ メニューを追加</h2>
+    <label>メニュー名</label>
+    <input id="f_menu" placeholder="例：唐揚げ定食">
+    <label>メニュー売価（税込・円）</label>
+    <input id="f_price" type="number" inputmode="decimal" placeholder="880" oninput="recalcForm()">
+
+    <h2 class="sec" style="margin-top:18px">使う食材（何個でも追加OK）</h2>
+    <div id="ingContainer"></div>
+    <button class="btn add" onclick="addIngRow()">＋ 食材を追加</button>
+
+    <div class="totalbar"><span>1食あたり 合計原価(税込)</span><b id="f_totalcost">¥0</b></div>
+    <div class="totalbar" style="background:#f0f7f2;border-color:#cfe6d8"><span>この売価での粗利</span><b id="f_profit" style="color:var(--green)">¥0</b></div>
+
+    <button class="btn" onclick="saveItem()">保存する</button>
+    <button class="btn sub" onclick="closeForm()">キャンセル</button>
+    <button class="btn danger hide" id="delBtn" onclick="deleteItem()">このメニューを削除</button>
+  </div>
+</div>
+
+<button id="fab" class="fab" onclick="openForm()">＋ メニューを追加</button>
+
+<script>
+const DISCOUNTS=[50,40,30,20,15,10,5];
+const yen=n=>'¥'+Math.round(n).toLocaleString('ja-JP');
+let items=JSON.parse(localStorage.getItem('izakaya_items_v2')||'null');
+let editIndex=-1;
+
+/* ---- 旧データ(単一食材)からの移行 ---- */
+if(items===null){
+  const old=JSON.parse(localStorage.getItem('izakaya_items')||'[]');
+  if(old.length){
+    items=old.map(o=>({menu:o.menu,price:o.price,
+      ings:[{food:o.food,cost:o.cost,taxrate:o.taxrate,qty:o.qty,unit:o.unit,use:o.use}]}));
+  }else{
+    items=[
+      {menu:'唐揚げ定食',price:880,ings:[
+        {food:'鶏もも肉',cost:1000,taxrate:8,qty:1000,unit:'g',use:150},
+        {food:'米',cost:400,taxrate:8,qty:1000,unit:'g',use:120},
+        {food:'キャベツ',cost:150,taxrate:8,qty:1000,unit:'g',use:60}
+      ]},
+      {menu:'刺身盛り合わせ',price:980,ings:[
+        {food:'マグロ',cost:2500,taxrate:8,qty:1000,unit:'g',use:80},
+        {food:'サーモン',cost:1800,taxrate:8,qty:1000,unit:'g',use:70}
+      ]}
+    ];
+  }
+  save();
+}
+function save(){localStorage.setItem('izakaya_items_v2',JSON.stringify(items));}
+
+/* ---- 計算 ---- */
+function ingCost(g){ // 1食あたり原価(税込)
+  const gross=(+g.cost||0)*(1+(+g.taxrate||0)/100);
+  return (+g.qty>0)? gross*(+g.use||0)/(+g.qty):0;
+}
+function calc(it){
+  let unitCost=0;
+  it.ings.forEach(g=>unitCost+=ingCost(g));
+  const profit=it.price-unitCost;
+  const rate=it.price>0?unitCost/it.price*100:0;
+  const disc=DISCOUNTS.map(d=>{const p=Math.round(it.price*(1-d/100));return{d,price:p,profit:p-unitCost};});
+  return{unitCost,profit,rate,disc};
+}
+function rateClass(r){return r<30?'ok':r<40?'warn':'bad';}
+function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+/* ---- 一覧描画 ---- */
+function render(){
+  const box=document.getElementById('itemList');
+  document.getElementById('emptyMsg').style.display=items.length?'none':'block';
+  box.innerHTML='';
+  items.forEach((it,i)=>{
+    const c=calc(it);
+    let iglist='';
+    it.ings.forEach(g=>{
+      iglist+=`<div class="ig"><span>${esc(g.food||'食材')}（${g.use}${g.unit}）</span><b>${yen(ingCost(g))}</b></div>`;
+    });
+    let rows='';
+    c.disc.forEach(x=>{rows+=`<tr><td>${x.d}%引</td><td class="price">${yen(x.price)}</td><td class="${x.profit<0?'neg':''}">${yen(x.profit)}</td></tr>`;});
+    const el=document.createElement('div');el.className='item';
+    el.innerHTML=`
+      <h3>${esc(it.menu||'(名称なし)')}</h3>
+      <div class="inglist">${iglist}</div>
+      <div class="result">
+        <div class="big ${c.profit<0?'neg':''}"><span>売価 ${yen(it.price)} の粗利</span><b>${yen(c.profit)}</b></div>
+        <div class="kv"><span>合計原価(税込・食材${it.ings.length}品)</span><b>${yen(c.unitCost)}</b></div>
+        <div class="kv"><span>原価率</span><b><span class="rate ${rateClass(c.rate)}">${c.rate.toFixed(1)}%</span></b></div>
+      </div>
+      <table><tr><th>割引</th><th>販売価格</th><th>その時の粗利</th></tr>${rows}</table>
+      <button class="btn sub" style="margin-top:12px" onclick="openForm(${i})">編集する</button>`;
+    box.appendChild(el);
+  });
+}
+
+/* ---- フォーム(食材が動的) ---- */
+let draftIngs=[];
+function ingRowHTML(idx,g){
+  return `<div class="ingcard" data-idx="${idx}">
+    <div class="ightitle">食材 ${idx+1}</div>
+    <button class="ingdel" onclick="removeIngRow(${idx})">削除</button>
+    <label>食材名</label>
+    <input placeholder="例：鶏もも肉" value="${esc(g.food||'')}" oninput="updIng(${idx},'food',this.value)">
+    <div class="row2">
+      <div><label>仕入価格(税抜)</label><input type="number" inputmode="decimal" placeholder="1000" value="${g.cost??''}" oninput="updIng(${idx},'cost',this.value)"></div>
+      <div><label>税率</label><select onchange="updIng(${idx},'taxrate',this.value)">
+        <option value="8" ${g.taxrate==8?'selected':''}>8%</option>
+        <option value="10" ${g.taxrate==10?'selected':''}>10%</option>
+        <option value="0" ${g.taxrate==0?'selected':''}>0%</option></select></div>
+    </div>
+    <div class="row3">
+      <div><label>仕入れ量</label><input type="number" inputmode="decimal" placeholder="1000" value="${g.qty??''}" oninput="updIng(${idx},'qty',this.value)"></div>
+      <div><label>単位</label><select onchange="updIng(${idx},'unit',this.value)">
+        ${['g','kg','ml','個','本'].map(u=>`<option ${g.unit==u?'selected':''}>${u}</option>`).join('')}</select></div>
+      <div><label>1食使用量</label><input type="number" inputmode="decimal" placeholder="150" value="${g.use??''}" oninput="updIng(${idx},'use',this.value)"></div>
+    </div>
+    <div class="subcost"><span>この食材の1食原価(税込)</span><b>${yen(ingCost(g))}</b></div>
+  </div>`;
+}
+function renderIngs(){
+  document.getElementById('ingContainer').innerHTML=draftIngs.map((g,i)=>ingRowHTML(i,g)).join('');
+  recalcForm();
+}
+function addIngRow(){draftIngs.push({food:'',cost:'',taxrate:8,qty:'',unit:'g',use:''});renderIngs();}
+function removeIngRow(i){draftIngs.splice(i,1);if(draftIngs.length===0)addIngRow();else renderIngs();}
+function updIng(i,k,v){draftIngs[i][k]=(k==='food'||k==='unit')?v:(+v||0);
+  // 原価表示だけ更新(再描画で入力フォーカスが飛ぶのを防ぐ)
+  const card=document.querySelector(`.ingcard[data-idx="${i}"] .subcost b`);
+  if(card)card.textContent=yen(ingCost(draftIngs[i]));
+  recalcForm();
+}
+function recalcForm(){
+  let total=0;draftIngs.forEach(g=>total+=ingCost(g));
+  const price=+document.getElementById('f_price').value||0;
+  document.getElementById('f_totalcost').textContent=yen(total);
+  const pf=document.getElementById('f_profit');
+  pf.textContent=yen(price-total);
+  pf.style.color=(price-total)<0?'var(--red)':'var(--green)';
+}
+function openForm(i){
+  editIndex=(typeof i==='number')?i:-1;
+  document.getElementById('formTitle').textContent=editIndex>=0?'メニューを編集':'＋ メニューを追加';
+  document.getElementById('delBtn').classList.toggle('hide',editIndex<0);
+  if(editIndex>=0){
+    const it=items[editIndex];
+    f_menu.value=it.menu;f_price.value=it.price;
+    draftIngs=JSON.parse(JSON.stringify(it.ings));
+  }else{
+    f_menu.value='';f_price.value='';
+    draftIngs=[{food:'',cost:'',taxrate:8,qty:'',unit:'g',use:''}];
+  }
+  renderIngs();showPage('form');
+}
+function saveItem(){
+  const menu=f_menu.value.trim();
+  if(!menu){alert('メニュー名を入れてください');return;}
+  const ings=draftIngs.filter(g=>g.food||g.cost||g.use);
+  if(ings.length===0){alert('食材を1つ以上入れてください');return;}
+  const it={menu,price:+f_price.value||0,ings};
+  if(editIndex>=0)items[editIndex]=it;else items.push(it);
+  save();closeForm();render();
+}
+function deleteItem(){
+  if(editIndex>=0&&confirm('このメニューを削除しますか？')){items.splice(editIndex,1);save();closeForm();render();}
+}
+function closeForm(){showPage(currentTab);}
+
+/* ---- タブ/ページ ---- */
+let currentTab='list';
+function switchTab(t){currentTab=t;
+  document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('active',el.dataset.tab===t));showPage(t);}
+function showPage(p){
+  document.getElementById('tab-list').classList.toggle('hide',p!=='list');
+  document.getElementById('tab-calc').classList.toggle('hide',p!=='calc');
+  document.getElementById('formPage').classList.toggle('hide',p!=='form');
+  document.getElementById('fab').classList.toggle('hide',p!=='list');
+  window.scrollTo(0,0);
+}
+
+/* ---- 税込計算機 ---- */
+function calcTax(){const net=+c_net.value||0,r=+c_rate1.value,g=net*(1+r/100);
+  c_gross.textContent=yen(g);c_tax.textContent=yen(g-net);}
+function calcTax2(){const g=+c_gross2.value||0,r=+c_rate2.value,net=g/(1+r/100);
+  c_net2.textContent=yen(net);c_tax2.textContent=yen(g-net);}
+
+render();calcTax();calcTax2();
+</script>
+</body>
+</html>
