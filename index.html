@@ -293,7 +293,7 @@ function ingRowHTML(idx,g){
     <div class="row3">
       <div><label>仕入れ量</label><input type="number" inputmode="decimal" placeholder="1000" value="${g.qty??''}" oninput="updIng(${idx},'qty',this.value)"></div>
       <div><label>単位</label><select onchange="updIng(${idx},'unit',this.value)">
-        ${['g','kg','ml','個','本'].map(u=>`<option ${g.unit==u?'selected':''}>${u}</option>`).join('')}</select></div>
+        ${['g','kg','ml','個','本','食','パック','袋','枚'].map(u=>`<option ${g.unit==u?'selected':''}>${u}</option>`).join('')}</select></div>
       <div><label>1食使用量</label><input type="number" inputmode="decimal" placeholder="150" value="${g.use??''}" oninput="updIng(${idx},'use',this.value)"></div>
     </div>
     <div class="subcost"><span>この食材の1食原価(税込)</span><b>${yen(ingCost(g))}</b></div>
