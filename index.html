@@ -59,6 +59,9 @@ td.price{font-weight:700}
 .rate.ok{background:#e2efda;color:#2e7d46}.rate.warn{background:#fff3cd;color:#8a6d00}.rate.bad{background:#fdecea;color:var(--red)}
 .item{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
 .item h3{margin:0 0 6px;font-size:17px}
+.item .mv{float:right;display:inline-flex;gap:6px;margin-left:8px}
+.item .mv button{width:34px;height:28px;border-radius:8px;border:1.5px solid var(--line);background:#fff;color:var(--navy);font-size:13px;font-weight:700}
+.item .mv button:disabled{opacity:.3}
 .inglist{font-size:12px;color:var(--sub);margin-bottom:6px}
 .inglist .ig{display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px dashed #eef1f5}
 .inglist .ig b{color:var(--ink);font-weight:600}
@@ -349,6 +352,10 @@ textarea:focus{border-color:var(--blue);background:#fff}
 
 <!-- ========== メニュー一覧 ========== -->
 <div id="tab-list" class="wrap hide">
+  <div class="sortbar" id="menuSortbar" style="display:none">
+    <button id="mSortKana" onclick="setMenuSort('kana')">あいうえお順</button>
+    <button id="mSortManual" onclick="setMenuSort('manual')">自分で並べる</button>
+  </div>
   <button class="btn sub" id="exportBtn" style="margin-top:0;margin-bottom:12px" onclick="exportCSV()">📊 エクセル(CSV)で出力</button>
   <div id="itemList"></div>
   <div id="emptyMsg" class="empty">
@@ -1013,13 +1020,32 @@ function calc(it){
 }
 function rateClass(r){return r<30?'ok':r<40?'warn':'bad';}
 
+let menuSort=localStorage.getItem('menu_sortmode')||'manual';
+function setMenuSort(m){menuSort=m;localStorage.setItem('menu_sortmode',m);render();}
+function sortedItems(){
+  const arr=items.map((it,idx)=>({it,idx}));
+  if(menuSort==='kana')arr.sort((a,b)=>String(a.it.menu||'').localeCompare(String(b.it.menu||''),'ja'));
+  return arr; // manual＝配列順そのまま
+}
+function moveMenu(i,dir){
+  const j=i+dir;
+  if(j<0||j>=items.length)return;
+  [items[i],items[j]]=[items[j],items[i]];
+  saveMenu();render();
+}
 function render(){
   updateTabCounts();
   const box=document.getElementById('itemList');
   document.getElementById('emptyMsg').style.display=items.length?'none':'block';
   document.getElementById('exportBtn').style.display=items.length?'block':'none';
+  const sb=document.getElementById('menuSortbar');
+  if(sb)sb.style.display=items.length?'flex':'none';
+  const kb=document.getElementById('mSortKana'),mb=document.getElementById('mSortManual');
+  if(kb)kb.classList.toggle('on',menuSort==='kana');
+  if(mb)mb.classList.toggle('on',menuSort==='manual');
   box.innerHTML='';
-  items.forEach((it,i)=>{
+  const manual=menuSort==='manual';
+  sortedItems().forEach(({it,idx:i})=>{
     const c=calc(it);
     let iglist='';
     it.ings.forEach(g=>{
@@ -1028,9 +1054,13 @@ function render(){
     });
     let rows='';
     c.disc.forEach(x=>{rows+=`<tr><td>${x.d}%引</td><td class="price">${yen(x.price)}</td><td class="${x.profit<0?'neg':''}">${yen(x.profit)}</td><td><span class="rate ${rateClass(x.rate)}">${x.rate.toFixed(1)}%</span></td></tr>`;});
+    const mv=manual?`<span class="mv">
+        <button onclick="moveMenu(${i},-1)" ${i===0?'disabled':''}>▲</button>
+        <button onclick="moveMenu(${i},1)" ${i===items.length-1?'disabled':''}>▼</button>
+      </span>`:'';
     const el=document.createElement('div');el.className='item';
     el.innerHTML=`
-      <h3>${esc(it.menu||'(名称なし)')}</h3>
+      <h3>${mv}${esc(it.menu||'(名称なし)')}</h3>
       <div class="inglist">${iglist}</div>
       <div class="result">
         <div class="big ${c.profit<0?'neg':''}"><span>売価 ${yen(it.price)} の粗利</span><b>${yen(c.profit)}</b></div>
