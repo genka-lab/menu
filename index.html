@@ -1008,7 +1008,7 @@ function calc(it){
   it.ings.forEach(g=>unitCost+=ingCost(g));
   const profit=it.price-unitCost;
   const rate=it.price>0?unitCost/it.price*100:0;
-  const disc=DISCOUNTS.map(d=>{const p=Math.round(it.price*(1-d/100));return{d,price:p,profit:p-unitCost};});
+  const disc=DISCOUNTS.map(d=>{const p=Math.round(it.price*(1-d/100));return{d,price:p,profit:p-unitCost,rate:p>0?unitCost/p*100:0};});
   return{unitCost,profit,rate,disc};
 }
 function rateClass(r){return r<30?'ok':r<40?'warn':'bad';}
@@ -1027,7 +1027,7 @@ function render(){
       iglist+=`<div class="ig"><span>${esc(g.food||'食材')}（${q}）</span><b>${yen(ingCost(g))}</b></div>`;
     });
     let rows='';
-    c.disc.forEach(x=>{rows+=`<tr><td>${x.d}%引</td><td class="price">${yen(x.price)}</td><td class="${x.profit<0?'neg':''}">${yen(x.profit)}</td></tr>`;});
+    c.disc.forEach(x=>{rows+=`<tr><td>${x.d}%引</td><td class="price">${yen(x.price)}</td><td class="${x.profit<0?'neg':''}">${yen(x.profit)}</td><td><span class="rate ${rateClass(x.rate)}">${x.rate.toFixed(1)}%</span></td></tr>`;});
     const el=document.createElement('div');el.className='item';
     el.innerHTML=`
       <h3>${esc(it.menu||'(名称なし)')}</h3>
@@ -1037,7 +1037,7 @@ function render(){
         <div class="kv"><span>合計原価(税込・食材${it.ings.length}品)</span><b>${yen(c.unitCost)}</b></div>
         <div class="kv"><span>原価率</span><b><span class="rate ${rateClass(c.rate)}">${c.rate.toFixed(1)}%</span></b></div>
       </div>
-      <table><tr><th>割引</th><th>販売価格</th><th>その時の粗利</th></tr>${rows}</table>
+      <table><tr><th>割引</th><th>販売価格</th><th>その時の粗利</th><th>原価率</th></tr>${rows}</table>
       <button class="btn sub" style="margin-top:12px" onclick="openForm(${i})">編集する</button>`;
     box.appendChild(el);
   });
@@ -1193,10 +1193,10 @@ function exportCSV(){
   rows.push([]);
   rows.push(['■ 割引価格と粗利']);
   const head=['メニュー名','通常売価'];
-  DISCOUNTS.forEach(d=>head.push(d+'%引 価格',d+'%引 粗利'));
+  DISCOUNTS.forEach(d=>head.push(d+'%引 価格',d+'%引 粗利',d+'%引 原価率(%)'));
   rows.push(head);
   items.forEach(it=>{const c=calc(it),r=[it.menu,Math.round(it.price)];
-    c.disc.forEach(x=>{r.push(Math.round(x.price),Math.round(x.profit));});rows.push(r);});
+    c.disc.forEach(x=>{r.push(Math.round(x.price),Math.round(x.profit),x.rate.toFixed(1));});rows.push(r);});
   const csv=rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
   const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
   const d=new Date(),p=n=>String(n).padStart(2,'0');
