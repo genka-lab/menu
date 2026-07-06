@@ -15,10 +15,14 @@ create table if not exists inv_ingredients (
   yellow_at   numeric     not null default 5,       -- この数以下で🟡要注意
   red_at      numeric     not null default 2,       -- この数以下で🔴発注
   note        text        not null default '',
+  ordered_on  date,                                  -- 仕入日（発注した日）古い在庫の見分け用
   sort_order  int         not null default 0,
   updated_at  timestamptz not null default now(),
   created_at  timestamptz not null default now()
 );
+
+-- 既存テーブルに後から列を足す場合（すでに在庫を使っている人向け・何度実行してもOK）
+alter table inv_ingredients add column if not exists ordered_on date;
 
 -- ② 在庫変動ログ（誰がいつ何をしたか＝みんなで管理の透明性）------
 create table if not exists inv_logs (

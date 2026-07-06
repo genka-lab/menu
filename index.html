@@ -112,6 +112,22 @@ h2.sec{font-size:15px;color:var(--navy);margin:4px 0 12px;display:flex;align-ite
 .sc_num b{font-size:30px;font-weight:800;line-height:1}
 .sc_num.red b{color:var(--red)}.sc_num.yellow b{color:#b58900}.sc_num.green b{color:var(--ink)}
 .sc_num span{font-size:14px;color:var(--sub)}
+.initbox{background:#f7f7f4;border:1px dashed var(--line);border-radius:12px;padding:10px 12px;margin:6px 0}
+.initbox .initttl{font-size:12px;color:var(--sub);font-weight:700;margin-bottom:4px}
+.lots{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.lotempty{margin-top:8px;font-size:12px;color:var(--sub)}
+.lot{display:flex;align-items:center;gap:8px;background:#f4f4f1;border-radius:9px;padding:6px 8px 6px 11px}
+.lot.old{background:#ffe6cc}
+.lot_d{font-size:12px;color:var(--sub)}
+.lot.old .lot_d{color:#a85400;font-weight:600}
+.lot_d i{font-style:normal;opacity:.85}
+.lot_q{margin-left:auto;font-size:13px;color:var(--sub);white-space:nowrap}
+.lot_q b{font-size:16px;font-weight:800;color:var(--ink);margin-right:1px}
+.lot.old .lot_q b{color:#a85400}
+.lot_use{flex:0 0 34px;padding:6px 0;font-size:16px;font-weight:800;color:var(--red);
+  border:1.5px solid #f0b8b0;background:#fff;border-radius:8px}
+.lot_edit{flex:0 0 34px;padding:6px 0;font-size:13px;border:1.5px solid var(--line);
+  background:#fff;border-radius:8px}
 .sc_acts{display:flex;gap:8px;margin-top:10px}
 .sc_acts button{flex:1;padding:11px 6px;font-size:14px;font-weight:700;border-radius:10px;border:1.5px solid var(--line);background:#fff}
 .sc_acts .use{color:var(--red);border-color:#f0b8b0}
@@ -235,8 +251,13 @@ textarea:focus{border-color:var(--blue);background:#fff}
         <input id="if_portion" placeholder="例：150g">
       </div>
     </div>
-    <label>今の在庫数（<span id="if_unitlabel">パック</span>）</label>
-    <input id="if_stock" type="number" inputmode="decimal" placeholder="6">
+    <div id="if_initbox" class="initbox">
+      <div class="initttl">最初の在庫（あとから「＋ 仕入れた」で足せます）</div>
+      <label>今ある在庫数（<span id="if_unitlabel">パック</span>）</label>
+      <input id="if_stock" type="number" inputmode="decimal" placeholder="6">
+      <label>📅 仕入日（発注した日）</label>
+      <input id="if_ordered" type="date">
+    </div>
     <div class="row2">
       <div>
         <label>🟡 要注意ライン（この数以下で黄）</label>
@@ -252,6 +273,21 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <button class="btn" onclick="saveIng()">保存する</button>
     <button class="btn sub" onclick="closeIngForm()">キャンセル</button>
     <button class="btn danger hide" id="ingDelBtn" onclick="deleteIng()">この食材を削除</button>
+  </div>
+</div>
+
+<!-- ========== ロット（仕入れ束）訂正フォーム ========== -->
+<div id="lotFormPage" class="wrap hide">
+  <div class="card">
+    <h2 class="sec">ロットを訂正</h2>
+    <div id="lf_food" class="sc_sub" style="margin-bottom:10px;font-size:15px;font-weight:700"></div>
+    <label>数量（<span id="lf_unit">パック</span>）</label>
+    <input id="lf_qty" type="number" inputmode="decimal">
+    <label>📅 仕入日（発注した日）</label>
+    <input id="lf_date" type="date">
+    <button class="btn" onclick="saveLot()">保存する</button>
+    <button class="btn sub" onclick="showPage('stock')">キャンセル</button>
+    <button class="btn danger" onclick="deleteLot()">このロットを削除</button>
   </div>
 </div>
 
@@ -434,8 +470,9 @@ function initDB(){
 async function loadInventory(){
   if(!db)return;
   setConn('off','在庫を読み込み中…');
-  const [ing,lg]=await Promise.all([
-    db.from('inv_ingredients').select('*').order('stock',{ascending:true}),
+  const [ing,lots,lg]=await Promise.all([
+    db.from('inv_ingredients').select('*'),
+    db.from('inv_lots').select('*'),
     db.from('inv_logs').select('*').order('created_at',{ascending:false}).limit(30)
   ]);
   if(ing.error){
@@ -444,6 +481,17 @@ async function loadInventory(){
     return;
   }
   ingredients=ing.data||[];
+  // ロットを食材にぶら下げ、合計残数を計算（古い順に並べる）
+  const byIng={};
+  (((lots&&!lots.error&&lots.data))||[]).forEach(l=>{(byIng[l.ingredient_id]=byIng[l.ingredient_id]||[]).push(l);});
+  ingredients.forEach(g=>{
+    const ls=(byIng[g.id]||[]).sort((a,b)=>{
+      const da=a.ordered_on||'9999',db2=b.ordered_on||'9999';
+      return da<db2?-1:da>db2?1:(a.created_at<b.created_at?-1:1);
+    });
+    g.lots=ls;
+    g.stock=ls.reduce((s,l)=>s+(+l.qty),0);
+  });
   logs=(lg&&!lg.error)?(lg.data||[]):[];
   setConn('on','🟢 オンライン共有中（変更は全員に反映されます）');
   renderInventory();
@@ -454,9 +502,49 @@ function setupRealtime(){
   if(!db)return;
   db.channel('inv-live')
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_ingredients'},loadInventory)
+    .on('postgres_changes',{event:'*',schema:'public',table:'inv_lots'},loadInventory)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_logs'},loadInventory)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_recipes'},loadRecipes)
     .subscribe();
+}
+
+/* 仕入日ユーティリティ（ブラウザのローカル日付） */
+function todayStr(){
+  const d=new Date();const p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+function daysAgo(ymd){
+  if(!ymd)return null;
+  const a=new Date(ymd+'T00:00:00');const b=new Date(todayStr()+'T00:00:00');
+  if(isNaN(a))return null;
+  return Math.round((b-a)/86400000);
+}
+function agoLabel(ymd){
+  const d=daysAgo(ymd);
+  if(d===null)return '';
+  if(d===0)return '今日';if(d===1)return '昨日';if(d>0)return `${d}日前`;
+  return '';
+}
+function mdLabel(ymd){
+  if(!ymd)return '日付なし';
+  const p=String(ymd).split('-');
+  return p.length===3?`${+p[1]}/${+p[2]}`:esc(ymd);
+}
+/* ロット内訳（仕入日ごと）。古い順に並び、1週間以上たった束はオレンジ強調 */
+function lotRows(g){
+  if(!g.lots||!g.lots.length)
+    return `<div class="lotempty">在庫なし（「＋ 仕入れた」で追加）</div>`;
+  return `<div class="lots">`+g.lots.map(l=>{
+    const d=daysAgo(l.ordered_on);
+    const old=d!==null&&d>=7;
+    const ago=agoLabel(l.ordered_on);
+    return `<div class="lot${old?' old':''}">
+      <span class="lot_d">📅 ${mdLabel(l.ordered_on)}${ago?`<i>（${ago}）</i>`:''}</span>
+      <span class="lot_q"><b>${(+l.qty)}</b>${esc(g.unit_name)}</span>
+      <button class="lot_use" onclick="useLot('${l.id}')">−</button>
+      <button class="lot_edit" onclick="editLot('${l.id}')">✏️</button>
+    </div>`;
+  }).join('')+`</div>`;
 }
 
 function statusOf(g){
@@ -502,8 +590,9 @@ function renderInventory(){
         <span class="sc_stat ${st}">${badge}</span>
       </div>
       <div class="sc_num ${st}"><span>残り</span><b>${(+g.stock)}</b><span>${esc(g.unit_name)}</span></div>
+      ${lotRows(g)}
       <div class="sc_acts">
-        <button class="use" onclick="quickUse('${g.id}')">− 1つ使った</button>
+        <button class="use" onclick="quickUse('${g.id}')">− 使った（古い順）</button>
         <button class="in" onclick="quickIn('${g.id}','${esc(g.unit_name)}')">＋ 仕入れた</button>
         <button class="edit" onclick="openIngForm('${g.id}')">⚙️</button>
       </div>
@@ -530,24 +619,30 @@ function renderFeed(){
   }).join('');
 }
 
-async function applyDelta(id,delta,kind,memo){
-  if(!db)return;
-  const who=getOperator();
-  // 楽観更新（すぐ画面に反映）
-  const g=ingredients.find(x=>x.id===id);
-  if(g){g.stock=(+g.stock)+delta;renderInventory();}
-  const {error}=await db.rpc('inv_apply_delta',
-    {p_id:id,p_delta:delta,p_kind:kind,p_who:who,p_memo:memo||''});
-  if(error){console.error(error);alert('保存に失敗しました。通信を確認してください。');loadInventory();return;}
-  loadInventory();
+/* 在庫RPC共通：呼んで、失敗なら知らせて、必ず読み直す */
+async function invRpc(fn,args,failMsg){
+  if(!db){alert('在庫の接続がありません');return false;}
+  const {error}=await db.rpc(fn,args);
+  if(error){console.error(error);alert(failMsg||'保存に失敗しました。SQL（supabase_lots.sql）の実行と通信を確認してください。');loadInventory();return false;}
+  loadInventory();return true;
 }
-function quickUse(id){applyDelta(id,-1,'use','');}
+/* − 使った（古い順＝先入れ先出しで一番古いロットから1つ減らす） */
+function quickUse(id){
+  const g=ingredients.find(x=>x.id===id);
+  if(!g||(+g.stock)<=0){alert('在庫がありません');return;}
+  invRpc('inv_consume_fifo',{p_ing:id,p_qty:1,p_who:getOperator()},'更新に失敗しました');
+}
+/* ＋ 仕入れた（＝新しいロットを今日の日付で追加。違う日ならロットの✏️で直せます） */
 function quickIn(id,unit){
-  const v=prompt(`何${unit} 仕入れましたか？（小分け後の数）`,'6');
+  const v=prompt(`何${unit} 仕入れましたか？（小分け後の数）\n※新しいロット（束）として追加されます`,'6');
   if(v===null)return;
   const n=Number(v);
-  if(!isFinite(n)||n===0){return;}
-  applyDelta(id,n,'in','');
+  if(!isFinite(n)||n<=0){return;}
+  invRpc('inv_add_lot',{p_ing:id,p_qty:n,p_date:todayStr(),p_who:getOperator()},'仕入れの登録に失敗しました');
+}
+/* 各ロットの「−」＝そのロットから1つ減らす */
+function useLot(lotId){
+  invRpc('inv_consume_lot',{p_lot:lotId,p_qty:1,p_who:getOperator()},'更新に失敗しました');
 }
 
 /* ---- 食材登録/編集フォーム ---- */
@@ -556,14 +651,18 @@ document.getElementById('if_unit').addEventListener('change',e=>{
 });
 function openIngForm(id){
   ingEditId=id||null;
+  const isNew=!id;
   document.getElementById('ingFormTitle').textContent=id?'食材を編集':'＋ 食材を登録';
   document.getElementById('ingDelBtn').classList.toggle('hide',!id);
+  // 「最初の在庫」欄は新規登録のときだけ表示（編集中はロットで管理するので隠す）
+  document.getElementById('if_initbox').style.display=isNew?'block':'none';
   const g=id?ingredients.find(x=>x.id===id):null;
   if_name.value=g?g.name:'';
   if_unit.value=g?g.unit_name:'パック';
   document.getElementById('if_unitlabel').textContent=if_unit.value;
   if_portion.value=g?g.portion_label:'';
-  if_stock.value=g?g.stock:'';
+  if_stock.value='';
+  if_ordered.value=todayStr();
   if_yellow.value=g?g.yellow_at:5;
   if_red.value=g?g.red_at:2;
   if_note.value=g?g.note:'';
@@ -577,26 +676,62 @@ async function saveIng(){
     name,
     unit_name:if_unit.value,
     portion_label:if_portion.value.trim(),
-    stock:Number(if_stock.value)||0,
     yellow_at:Number(if_yellow.value)||0,
     red_at:Number(if_red.value)||0,
     note:if_note.value.trim()
   };
-  let res, after=row.stock;
   if(ingEditId){
-    res=await db.from('inv_ingredients').update(row).eq('id',ingEditId);
+    const res=await db.from('inv_ingredients').update(row).eq('id',ingEditId);
+    if(res.error){console.error(res.error);alert('保存に失敗しました。SQL実行と通信を確認してください。');return;}
+    await db.from('inv_logs').insert({
+      ingredient_id:ingEditId, ingredient_name:name,
+      kind:'adjust', delta:0, who:getOperator(), memo:'情報を編集'
+    });
   }else{
-    res=await db.from('inv_ingredients').insert(row).select().single();
+    const res=await db.from('inv_ingredients').insert(row).select().single();
+    if(res.error){console.error(res.error);alert('保存に失敗しました。SQL実行と通信を確認してください。');return;}
+    const newId=res.data&&res.data.id;
+    const q=Number(if_stock.value)||0;
+    if(q>0){
+      // 最初の在庫を1つ目のロットとして登録
+      await db.rpc('inv_add_lot',{p_ing:newId,p_qty:q,p_date:if_ordered.value||todayStr(),p_who:getOperator()});
+    }else{
+      await db.from('inv_logs').insert({
+        ingredient_id:newId, ingredient_name:name,
+        kind:'new', delta:0, stock_after:0, who:getOperator(), memo:'新規登録'
+      });
+    }
   }
-  if(res.error){console.error(res.error);alert('保存に失敗しました。SQL実行と通信を確認してください。');return;}
-  // 履歴（新規登録/編集）
-  const logId=ingEditId||(res.data&&res.data.id);
-  await db.from('inv_logs').insert({
-    ingredient_id:logId, ingredient_name:name,
-    kind:ingEditId?'adjust':'new', delta:0, stock_after:after,
-    who:getOperator(), memo:ingEditId?'情報を編集':'新規登録'
-  });
   closeIngForm();loadInventory();
+}
+/* ---- ロットの訂正／削除 ---- */
+let lotEditId=null;
+function editLot(lotId){
+  let lot=null, food=null;
+  for(const g of ingredients){
+    const f=(g.lots||[]).find(x=>x.id===lotId);
+    if(f){lot=f;food=g;break;}
+  }
+  if(!lot)return;
+  lotEditId=lotId;
+  document.getElementById('lf_food').textContent=food.name;
+  document.getElementById('lf_unit').textContent=food.unit_name;
+  lf_qty.value=(+lot.qty);
+  lf_date.value=lot.ordered_on||'';
+  showPage('lotform');
+}
+async function saveLot(){
+  if(!lotEditId||!db)return;
+  const q=Number(lf_qty.value);
+  if(!isFinite(q)){alert('数量を入れてください');return;}
+  await db.rpc('inv_edit_lot',{p_lot:lotEditId,p_qty:q,p_date:lf_date.value||null,p_who:getOperator()});
+  showPage('stock');loadInventory();
+}
+async function deleteLot(){
+  if(!lotEditId||!db)return;
+  if(!confirm('このロット（この仕入れ分）を削除しますか？'))return;
+  await db.rpc('inv_edit_lot',{p_lot:lotEditId,p_qty:0,p_date:null,p_who:getOperator()});
+  showPage('stock');loadInventory();
 }
 async function deleteIng(){
   if(!ingEditId||!db)return;
@@ -998,6 +1133,7 @@ function showPage(p){
   document.getElementById('tab-calc').classList.toggle('hide',p!=='calc');
   document.getElementById('formPage').classList.toggle('hide',p!=='form');
   document.getElementById('ingFormPage').classList.toggle('hide',p!=='ingform');
+  document.getElementById('lotFormPage').classList.toggle('hide',p!=='lotform');
   document.getElementById('recipeDetailPage').classList.toggle('hide',p!=='rdetail');
   document.getElementById('recipeFormPage').classList.toggle('hide',p!=='recipeform');
   const fab=document.getElementById('fab');
