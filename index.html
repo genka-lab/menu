@@ -262,7 +262,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <button id="sortKana" onclick="setRecipeSort('kana')">あいうえお順</button>
     <button id="sortManual" onclick="setRecipeSort('manual')">自分で並べる</button>
   </div>
-  <input id="rSearch" placeholder="🔍 メニュー名で検索" oninput="renderRecipes()" style="margin-bottom:12px">
+  <input id="rSearch" placeholder="🔍 メニュー名・食材で検索（一部だけでOK）" oninput="renderRecipes()" style="margin-bottom:12px">
   <div id="recipeList"></div>
   <div id="recipeEmpty" class="empty" style="display:none">
     まだレシピがありません。<br>下の「＋ レシピを登録」から追加してください。
@@ -616,6 +616,8 @@ function closeIngForm(){showPage('stock');}
    レシピ（調理方法）＝Supabase共有 ＋ 写真はStorage
    ============================================================ */
 const escA=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+/* 検索用の正規化：カタカナ→ひらがな・小文字化・空白除去（部分一致で拾いやすく） */
+const normJa=s=>String(s||'').toLowerCase().replace(/[ァ-ヶ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60)).replace(/\s+/g,'');
 let recipes=[], recipeSort=localStorage.getItem('recipe_sortmode')||'kana';
 let draftRecipe=null, recipeEditId=null;
 
@@ -642,10 +644,14 @@ function renderRecipes(){
   document.getElementById('sortKana').classList.toggle('on',recipeSort==='kana');
   document.getElementById('sortManual').classList.toggle('on',recipeSort==='manual');
   document.getElementById('recipeEmpty').style.display=recipes.length?'none':'block';
-  const q=(document.getElementById('rSearch').value||'').trim();
+  const q=normJa(document.getElementById('rSearch').value);
   let list=sortedRecipes();
-  if(q)list=list.filter(r=>(r.name+' '+(r.yomi||'')).includes(q));
+  if(q)list=list.filter(r=>normJa([r.name,r.yomi,r.steps,r.seasoning,r.garnish].join(' ')).includes(q));
   const manual=recipeSort==='manual'&&!q;
+  if(q&&list.length===0&&recipes.length){
+    document.getElementById('recipeList').innerHTML='<div class="empty">「'+esc(document.getElementById('rSearch').value.trim())+'」に一致するレシピはありません。</div>';
+    return;
+  }
   document.getElementById('recipeList').innerHTML=list.map((r,i)=>{
     const thumb=r.hero_url?`<img class="thumb" src="${escA(r.hero_url)}" alt="">`:`<div class="thumb ph">🍽</div>`;
     const ex=([r.seasoning,r.garnish].filter(Boolean).join(' / ')||(r.steps||'').replace(/\n/g,' ')).slice(0,40);
