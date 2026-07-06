@@ -25,6 +25,9 @@ header p{margin:2px 0 0;font-size:12px;opacity:.85}
 .tabs{display:flex;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:64px;z-index:15}
 .tab{flex:1;text-align:center;padding:12px 4px;font-size:14px;font-weight:600;color:var(--sub);border-bottom:3px solid transparent}
 .tab.active{color:var(--navy);border-bottom-color:var(--navy)}
+.cnt{display:none;margin-left:5px;min-width:18px;padding:1px 6px;border-radius:999px;background:var(--line);color:var(--sub);font-size:11px;font-weight:700;vertical-align:middle}
+.cnt.show{display:inline-block}
+.tab.active .cnt.show{background:var(--navy);color:#fff}
 .wrap{padding:14px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 label{display:block;font-size:12px;color:var(--sub);margin:10px 0 4px;font-weight:600}
@@ -208,9 +211,9 @@ textarea:focus{border-color:var(--blue);background:#fff}
 </header>
 
 <div class="tabs">
-  <div class="tab active" data-tab="stock" onclick="switchTab('stock')">📦在庫</div>
-  <div class="tab" data-tab="recipe" onclick="switchTab('recipe')">📖レシピ</div>
-  <div class="tab" data-tab="list" onclick="switchTab('list')">🍽メニュー</div>
+  <div class="tab active" data-tab="stock" onclick="switchTab('stock')">📦在庫<span class="cnt" id="cnt-stock"></span></div>
+  <div class="tab" data-tab="recipe" onclick="switchTab('recipe')">📖レシピ<span class="cnt" id="cnt-recipe"></span></div>
+  <div class="tab" data-tab="list" onclick="switchTab('list')">🍽メニュー<span class="cnt" id="cnt-list"></span></div>
   <div class="tab" data-tab="calc" onclick="switchTab('calc')">🧮税込</div>
 </div>
 
@@ -554,7 +557,19 @@ function statusOf(g){
   return'green';
 }
 
+function setTabCount(id,n){
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.textContent=n;
+  el.classList.toggle('show',n>0);
+}
+function updateTabCounts(){
+  setTabCount('cnt-stock',(typeof ingredients!=='undefined'?ingredients:[]).length);
+  setTabCount('cnt-recipe',(typeof recipes!=='undefined'?recipes:[]).length);
+  setTabCount('cnt-list',(typeof items!=='undefined'&&items?items:[]).length);
+}
 function renderInventory(){
+  updateTabCounts();
   const box=document.getElementById('stockList');
   document.getElementById('stockEmpty').style.display=ingredients.length?'none':'block';
   // 並び順: 赤→黄→緑、同色内は残数少ない順
@@ -776,6 +791,7 @@ function sortedRecipes(){
   return list;
 }
 function renderRecipes(){
+  updateTabCounts();
   document.getElementById('sortKana').classList.toggle('on',recipeSort==='kana');
   document.getElementById('sortManual').classList.toggle('on',recipeSort==='manual');
   document.getElementById('recipeEmpty').style.display=recipes.length?'none':'block';
@@ -998,6 +1014,7 @@ function calc(it){
 function rateClass(r){return r<30?'ok':r<40?'warn':'bad';}
 
 function render(){
+  updateTabCounts();
   const box=document.getElementById('itemList');
   document.getElementById('emptyMsg').style.display=items.length?'none':'block';
   document.getElementById('exportBtn').style.display=items.length?'block':'none';
