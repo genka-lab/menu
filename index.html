@@ -5,12 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1F3B57">
-<title>居酒屋メニュー計算</title>
+<title>居酒屋メニュー・在庫</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --navy:#1F3B57; --blue:#2E5E8C; --green:#2E7D46; --orange:#C55A11;
   --bg:#f4f6f9; --card:#ffffff; --line:#e2e8f0; --ink:#1f2933; --sub:#64748b;
   --red:#c0392b; --redbg:#fdecea; --input:#eef4fb;
+  --yellow:#8a6d00; --yellowbg:#fff7db; --yellowline:#f0d97a;
+  --greenline:#bfe0c9;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;font-family:-apple-system,"Hiragino Kaku Gothic ProN","メイリオ",sans-serif;
@@ -81,6 +84,46 @@ h2.sec{font-size:15px;color:var(--navy);margin:4px 0 12px;display:flex;align-ite
 .totalbar{display:flex;justify-content:space-between;align-items:center;background:#eef4fb;border:1px solid #cfe0f2;
   border-radius:12px;padding:12px;margin-top:12px;font-weight:700}
 .totalbar b{font-size:18px;color:var(--navy)}
+/* ===== 在庫管理 ===== */
+.opbar{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);
+  border-radius:12px;padding:8px 10px;margin-bottom:12px}
+.opbar label{margin:0;white-space:nowrap}
+.opbar input{padding:8px 10px;font-size:14px}
+.alertbar{border-radius:12px;padding:12px 14px;margin-bottom:12px;font-weight:700;font-size:14px;display:flex;gap:14px;flex-wrap:wrap}
+.alertbar.red{background:var(--redbg);border:1.5px solid #f3b4ab;color:var(--red)}
+.alertbar.ok{background:#eef7f0;border:1.5px solid var(--greenline);color:var(--green)}
+.alertbar .a{display:flex;align-items:center;gap:5px}
+.conn{font-size:12px;font-weight:700;padding:6px 10px;border-radius:10px;margin-bottom:12px;text-align:center}
+.conn.on{background:#eef7f0;color:var(--green);border:1px solid var(--greenline)}
+.conn.off{background:#fff4e5;color:var(--orange);border:1px solid #f3d3a8}
+.conn.err{background:var(--redbg);color:var(--red);border:1px solid #f3b4ab}
+.stockcard{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--greenline);
+  border-radius:14px;padding:12px 14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.stockcard.yellow{border-left-color:#e6b800;background:var(--yellowbg)}
+.stockcard.red{border-left-color:var(--red);background:var(--redbg)}
+.sc_top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.sc_name{font-size:17px;font-weight:700;margin:0}
+.sc_sub{font-size:12px;color:var(--sub);margin-top:2px}
+.sc_stat{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap}
+.sc_stat.green{background:#e2efda;color:var(--green)}
+.sc_stat.yellow{background:#fff0b8;color:var(--yellow)}
+.sc_stat.red{background:#f7c9c2;color:var(--red)}
+.sc_num{display:flex;align-items:baseline;gap:4px;margin:8px 0 2px}
+.sc_num b{font-size:30px;font-weight:800;line-height:1}
+.sc_num.red b{color:var(--red)}.sc_num.yellow b{color:#b58900}.sc_num.green b{color:var(--ink)}
+.sc_num span{font-size:14px;color:var(--sub)}
+.sc_acts{display:flex;gap:8px;margin-top:10px}
+.sc_acts button{flex:1;padding:11px 6px;font-size:14px;font-weight:700;border-radius:10px;border:1.5px solid var(--line);background:#fff}
+.sc_acts .use{color:var(--red);border-color:#f0b8b0}
+.sc_acts .in{color:var(--green);border-color:#bfe0c9}
+.sc_acts .edit{color:var(--sub);flex:0 0 46px}
+.feed{font-size:13px}
+.feed .row{display:flex;gap:8px;padding:7px 2px;border-bottom:1px dashed #eef1f5;align-items:baseline}
+.feed .row .t{color:var(--sub);font-size:11px;white-space:nowrap}
+.feed .row .d{font-weight:700;white-space:nowrap}
+.feed .row .d.plus{color:var(--green)}.feed .row .d.minus{color:var(--red)}
+details.feedwrap{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px 12px;margin-top:6px}
+details.feedwrap summary{padding:10px 0;font-weight:700;color:var(--navy);font-size:14px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -100,17 +143,75 @@ h2.sec{font-size:15px;color:var(--navy);margin:4px 0 12px;display:flex;align-ite
 
 <header>
   <button class="lockbtn" onclick="relock()">🔒 ロック</button>
-  <h1>🏮 居酒屋メニュー計算</h1>
-  <p>複数食材の合算原価・税込・割引価格・利益を計算</p>
+  <h1>🏮 居酒屋 メニュー・在庫</h1>
+  <p>在庫をみんなで共有 ／ 原価・割引・利益も計算</p>
 </header>
 
 <div class="tabs">
-  <div class="tab active" data-tab="list" onclick="switchTab('list')">メニュー一覧</div>
-  <div class="tab" data-tab="calc" onclick="switchTab('calc')">税込計算機</div>
+  <div class="tab active" data-tab="stock" onclick="switchTab('stock')">📦 在庫</div>
+  <div class="tab" data-tab="list" onclick="switchTab('list')">🍽 メニュー</div>
+  <div class="tab" data-tab="calc" onclick="switchTab('calc')">🧮 税込計算</div>
+</div>
+
+<!-- ========== 在庫管理 ========== -->
+<div id="tab-stock" class="wrap">
+  <div id="connBar" class="conn off">接続中…</div>
+  <div class="opbar">
+    <label>あなたの名前</label>
+    <input id="op_name" placeholder="例：たなか" oninput="setOperator(this.value)">
+  </div>
+  <div id="alertBar" class="alertbar ok" style="display:none"></div>
+  <div id="stockList"></div>
+  <div id="stockEmpty" class="empty" style="display:none">
+    まだ食材が登録されていません。<br>下の「＋ 食材を登録」から追加してください。
+  </div>
+  <details class="feedwrap">
+    <summary>🕘 みんなの操作履歴</summary>
+    <div id="feed" class="feed"></div>
+  </details>
+</div>
+
+<!-- ========== 食材登録/編集フォーム ========== -->
+<div id="ingFormPage" class="wrap hide">
+  <div class="card">
+    <h2 class="sec" id="ingFormTitle">＋ 食材を登録</h2>
+    <label>食材名</label>
+    <input id="if_name" placeholder="例：鶏もも肉">
+    <div class="row2">
+      <div>
+        <label>数え方（単位）</label>
+        <select id="if_unit">
+          <option>パック</option><option>個</option><option>本</option>
+          <option>袋</option><option>枚</option><option>皿</option><option>杯</option>
+        </select>
+      </div>
+      <div>
+        <label>小分けの中身（目安）</label>
+        <input id="if_portion" placeholder="例：150g">
+      </div>
+    </div>
+    <label>今の在庫数（<span id="if_unitlabel">パック</span>）</label>
+    <input id="if_stock" type="number" inputmode="decimal" placeholder="6">
+    <div class="row2">
+      <div>
+        <label>🟡 要注意ライン（この数以下で黄）</label>
+        <input id="if_yellow" type="number" inputmode="decimal" placeholder="5">
+      </div>
+      <div>
+        <label>🔴 発注ライン（この数以下で赤）</label>
+        <input id="if_red" type="number" inputmode="decimal" placeholder="2">
+      </div>
+    </div>
+    <label>メモ（任意）</label>
+    <input id="if_note" placeholder="例：〇〇商店に発注／冷凍庫下段">
+    <button class="btn" onclick="saveIng()">保存する</button>
+    <button class="btn sub" onclick="closeIngForm()">キャンセル</button>
+    <button class="btn danger hide" id="ingDelBtn" onclick="deleteIng()">この食材を削除</button>
+  </div>
 </div>
 
 <!-- ========== メニュー一覧 ========== -->
-<div id="tab-list" class="wrap">
+<div id="tab-list" class="wrap hide">
   <button class="btn sub" id="exportBtn" style="margin-top:0;margin-bottom:12px" onclick="exportCSV()">📊 エクセル(CSV)で出力</button>
   <div id="itemList"></div>
   <div id="emptyMsg" class="empty">
@@ -148,7 +249,7 @@ h2.sec{font-size:15px;color:var(--navy);margin:4px 0 12px;display:flex;align-ite
   </div>
 </div>
 
-<!-- ========== 追加/編集フォーム ========== -->
+<!-- ========== メニュー追加/編集フォーム ========== -->
 <div id="formPage" class="wrap hide">
   <div class="card">
     <h2 class="sec" id="formTitle">＋ メニューを追加</h2>
@@ -170,7 +271,7 @@ h2.sec{font-size:15px;color:var(--navy);margin:4px 0 12px;display:flex;align-ite
   </div>
 </div>
 
-<button id="fab" class="fab" onclick="openForm()">＋ メニューを追加</button>
+<button id="fab" class="fab" onclick="fabAction()">＋ 食材を登録</button>
 
 <script>
 /* ============ 合言葉ロック ============ */
@@ -186,7 +287,7 @@ async function tryUnlock(){
   if(!pw){err.textContent="合言葉を入れてください";return;}
   const h=await sha256(pw);
   if(h===PW_HASH){
-    localStorage.setItem("izakaya_unlocked",PW_HASH); // ハッシュ変更時は自動で再ロックされる
+    localStorage.setItem("izakaya_unlocked",PW_HASH);
     document.getElementById("gate").style.display="none";
   }else{
     err.textContent="合言葉が違います";
@@ -199,17 +300,220 @@ function relock(){
   document.getElementById("gate_err").textContent="";
   document.getElementById("gate").style.display="flex";
 }
-/* 既に解除済みの端末はゲートを出さない(合言葉を変えたら再ロック) */
 if(localStorage.getItem("izakaya_unlocked")===PW_HASH){
   document.getElementById("gate").style.display="none";
 }
 
-const DISCOUNTS=[50,40,30,20,15,10,5];
 const yen=n=>'¥'+Math.round(n).toLocaleString('ja-JP');
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+/* ============================================================
+   在庫管理（Supabaseでみんなと共有）
+   ============================================================ */
+const SUPABASE_URL="https://awnqgypevtgfgbplphrc.supabase.co";
+const SUPABASE_KEY="sb_publishable_gD_f3dMvfwQiw5lM1fG9Qg_pglmWZKQ";
+let db=null, ingredients=[], logs=[], ingEditId=null;
+
+function setConn(cls,text){const b=document.getElementById('connBar');b.className='conn '+cls;b.textContent=text;}
+function getOperator(){return localStorage.getItem('inv_operator')||'';}
+function setOperator(v){localStorage.setItem('inv_operator',v);}
+
+function initDB(){
+  try{
+    db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+  }catch(e){ setConn('err','在庫の接続に失敗（ライブラリ未読込）'); return; }
+  document.getElementById('op_name').value=getOperator();
+  loadInventory();
+  setupRealtime();
+}
+
+async function loadInventory(){
+  if(!db)return;
+  setConn('off','在庫を読み込み中…');
+  const [ing,lg]=await Promise.all([
+    db.from('inv_ingredients').select('*').order('stock',{ascending:true}),
+    db.from('inv_logs').select('*').order('created_at',{ascending:false}).limit(30)
+  ]);
+  if(ing.error){
+    console.error(ing.error);
+    setConn('err','在庫テーブル未作成 or 接続エラー（SQLを実行してください）');
+    return;
+  }
+  ingredients=ing.data||[];
+  logs=(lg&&!lg.error)?(lg.data||[]):[];
+  setConn('on','🟢 オンライン共有中（変更は全員に反映されます）');
+  renderInventory();
+  renderFeed();
+}
+
+function setupRealtime(){
+  if(!db)return;
+  db.channel('inv-live')
+    .on('postgres_changes',{event:'*',schema:'public',table:'inv_ingredients'},loadInventory)
+    .on('postgres_changes',{event:'*',schema:'public',table:'inv_logs'},loadInventory)
+    .subscribe();
+}
+
+function statusOf(g){
+  const s=+g.stock;
+  if(s<=+g.red_at)return'red';
+  if(s<=+g.yellow_at)return'yellow';
+  return'green';
+}
+
+function renderInventory(){
+  const box=document.getElementById('stockList');
+  document.getElementById('stockEmpty').style.display=ingredients.length?'none':'block';
+  // 並び順: 赤→黄→緑、同色内は残数少ない順
+  const rank={red:0,yellow:1,green:2};
+  const sorted=[...ingredients].sort((a,b)=>{
+    const ra=rank[statusOf(a)],rb=rank[statusOf(b)];
+    return ra!==rb?ra-rb:(+a.stock)-(+b.stock);
+  });
+  // アラート集計
+  const reds=ingredients.filter(g=>statusOf(g)==='red');
+  const yels=ingredients.filter(g=>statusOf(g)==='yellow');
+  const ab=document.getElementById('alertBar');
+  if(ingredients.length===0){ab.style.display='none';}
+  else if(reds.length||yels.length){
+    ab.style.display='flex';ab.className='alertbar red';
+    ab.innerHTML=`${reds.length?`<span class="a">🔴 発注：<b>${reds.length}品</b></span>`:''}
+      ${yels.length?`<span class="a">🟡 要注意：<b>${yels.length}品</b></span>`:''}`;
+  }else{
+    ab.style.display='flex';ab.className='alertbar ok';
+    ab.innerHTML='<span class="a">✅ 在庫は足りています</span>';
+  }
+  box.innerHTML=sorted.map(g=>{
+    const st=statusOf(g);
+    const badge={green:'🟢 十分',yellow:'🟡 少なめ',red:'🔴 発注！'}[st];
+    const sub=[g.portion_label?`小分け：${esc(g.portion_label)}`:'',g.note?esc(g.note):'']
+      .filter(Boolean).join('　／　');
+    return `<div class="stockcard ${st}">
+      <div class="sc_top">
+        <div>
+          <p class="sc_name">${esc(g.name)}</p>
+          ${sub?`<div class="sc_sub">${sub}</div>`:''}
+        </div>
+        <span class="sc_stat ${st}">${badge}</span>
+      </div>
+      <div class="sc_num ${st}"><span>残り</span><b>${(+g.stock)}</b><span>${esc(g.unit_name)}</span></div>
+      <div class="sc_acts">
+        <button class="use" onclick="quickUse('${g.id}')">− 1つ使った</button>
+        <button class="in" onclick="quickIn('${g.id}','${esc(g.unit_name)}')">＋ 仕入れた</button>
+        <button class="edit" onclick="openIngForm('${g.id}')">⚙️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderFeed(){
+  const f=document.getElementById('feed');
+  if(!logs.length){f.innerHTML='<div class="row"><span class="t">まだ操作はありません</span></div>';return;}
+  const kindLabel={in:'仕入',use:'使用',adjust:'棚卸補正',new:'新規登録',delete:'削除'};
+  f.innerHTML=logs.map(l=>{
+    const d=new Date(l.created_at);
+    const p=n=>String(n).padStart(2,'0');
+    const t=`${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    const dv=(+l.delta);
+    const dcls=dv>0?'plus':dv<0?'minus':'';
+    const dtxt=dv>0?`+${dv}`:`${dv}`;
+    return `<div class="row">
+      <span class="t">${t}</span>
+      <span class="d ${dcls}">${dv!==0?dtxt:'—'}</span>
+      <span>${esc(l.ingredient_name||'')}（${kindLabel[l.kind]||l.kind}）${l.who?' ・'+esc(l.who):''}</span>
+    </div>`;
+  }).join('');
+}
+
+async function applyDelta(id,delta,kind,memo){
+  if(!db)return;
+  const who=getOperator();
+  // 楽観更新（すぐ画面に反映）
+  const g=ingredients.find(x=>x.id===id);
+  if(g){g.stock=(+g.stock)+delta;renderInventory();}
+  const {error}=await db.rpc('inv_apply_delta',
+    {p_id:id,p_delta:delta,p_kind:kind,p_who:who,p_memo:memo||''});
+  if(error){console.error(error);alert('保存に失敗しました。通信を確認してください。');loadInventory();return;}
+  loadInventory();
+}
+function quickUse(id){applyDelta(id,-1,'use','');}
+function quickIn(id,unit){
+  const v=prompt(`何${unit} 仕入れましたか？（小分け後の数）`,'6');
+  if(v===null)return;
+  const n=Number(v);
+  if(!isFinite(n)||n===0){return;}
+  applyDelta(id,n,'in','');
+}
+
+/* ---- 食材登録/編集フォーム ---- */
+document.getElementById('if_unit').addEventListener('change',e=>{
+  document.getElementById('if_unitlabel').textContent=e.target.value;
+});
+function openIngForm(id){
+  ingEditId=id||null;
+  document.getElementById('ingFormTitle').textContent=id?'食材を編集':'＋ 食材を登録';
+  document.getElementById('ingDelBtn').classList.toggle('hide',!id);
+  const g=id?ingredients.find(x=>x.id===id):null;
+  if_name.value=g?g.name:'';
+  if_unit.value=g?g.unit_name:'パック';
+  document.getElementById('if_unitlabel').textContent=if_unit.value;
+  if_portion.value=g?g.portion_label:'';
+  if_stock.value=g?g.stock:'';
+  if_yellow.value=g?g.yellow_at:5;
+  if_red.value=g?g.red_at:2;
+  if_note.value=g?g.note:'';
+  showPage('ingform');
+}
+async function saveIng(){
+  if(!db){alert('在庫の接続がありません');return;}
+  const name=if_name.value.trim();
+  if(!name){alert('食材名を入れてください');return;}
+  const row={
+    name,
+    unit_name:if_unit.value,
+    portion_label:if_portion.value.trim(),
+    stock:Number(if_stock.value)||0,
+    yellow_at:Number(if_yellow.value)||0,
+    red_at:Number(if_red.value)||0,
+    note:if_note.value.trim()
+  };
+  let res, after=row.stock;
+  if(ingEditId){
+    res=await db.from('inv_ingredients').update(row).eq('id',ingEditId);
+  }else{
+    res=await db.from('inv_ingredients').insert(row).select().single();
+  }
+  if(res.error){console.error(res.error);alert('保存に失敗しました。SQL実行と通信を確認してください。');return;}
+  // 履歴（新規登録/編集）
+  const logId=ingEditId||(res.data&&res.data.id);
+  await db.from('inv_logs').insert({
+    ingredient_id:logId, ingredient_name:name,
+    kind:ingEditId?'adjust':'new', delta:0, stock_after:after,
+    who:getOperator(), memo:ingEditId?'情報を編集':'新規登録'
+  });
+  closeIngForm();loadInventory();
+}
+async function deleteIng(){
+  if(!ingEditId||!db)return;
+  if(!confirm('この食材を在庫から削除しますか？'))return;
+  const g=ingredients.find(x=>x.id===ingEditId);
+  await db.from('inv_logs').insert({
+    ingredient_id:null, ingredient_name:g?g.name:'', kind:'delete',
+    delta:0, who:getOperator(), memo:'食材を削除'
+  });
+  const {error}=await db.from('inv_ingredients').delete().eq('id',ingEditId);
+  if(error){console.error(error);alert('削除に失敗しました');return;}
+  closeIngForm();loadInventory();
+}
+function closeIngForm(){showPage('stock');}
+
+/* ============================================================
+   メニュー計算（従来どおり localStorage 保存・オフラインOK）
+   ============================================================ */
+const DISCOUNTS=[50,40,30,20,15,10,5];
 let items=JSON.parse(localStorage.getItem('izakaya_items_v2')||'null');
 let editIndex=-1;
 
-/* ---- 旧データ(単一食材)からの移行 ---- */
 if(items===null){
   const old=JSON.parse(localStorage.getItem('izakaya_items')||'[]');
   if(old.length){
@@ -228,16 +532,15 @@ if(items===null){
       ]}
     ];
   }
-  save();
+  saveMenu();
 }
-function save(){localStorage.setItem('izakaya_items_v2',JSON.stringify(items));}
+function saveMenu(){localStorage.setItem('izakaya_items_v2',JSON.stringify(items));}
 
-/* ---- 計算 ---- */
-function ingCost(g){ // 1食あたり原価(税込)
+function ingCost(g){
   const tax=1+(+g.taxrate||0)/100;
-  if((g.mode||'split')==='direct'){ // 1食あたりを直接入力(単位合わせ不要)
+  if((g.mode||'split')==='direct'){
     const amt=+g.direct||0, dt=g.dtax??'incl';
-    return dt==='incl'? amt : amt*(1+(+dt||0)/100); // incl=税込そのまま / 数値=税抜き率
+    return dt==='incl'? amt : amt*(1+(+dt||0)/100);
   }
   const gross=(+g.cost||0)*tax;
   return (+g.qty>0)? gross*(+g.use||0)/(+g.qty):0;
@@ -251,9 +554,7 @@ function calc(it){
   return{unitCost,profit,rate,disc};
 }
 function rateClass(r){return r<30?'ok':r<40?'warn':'bad';}
-function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 
-/* ---- 一覧描画 ---- */
 function render(){
   const box=document.getElementById('itemList');
   document.getElementById('emptyMsg').style.display=items.length?'none':'block';
@@ -283,7 +584,6 @@ function render(){
   });
 }
 
-/* ---- フォーム(食材が動的) ---- */
 let draftIngs=[];
 function taxSelHTML(idx,g){
   return `<select onchange="updIng(${idx},'taxrate',this.value)">
@@ -340,7 +640,6 @@ function addIngRow(){draftIngs.push({food:'',cost:'',taxrate:8,qty:'',unit:'g',u
 function removeIngRow(i){draftIngs.splice(i,1);if(draftIngs.length===0)addIngRow();else renderIngs();}
 function updIngMode(i,v){draftIngs[i].mode=v;renderIngs();}
 function updIng(i,k,v){draftIngs[i][k]=(k==='food'||k==='unit'||k==='dtax')?v:(+v||0);
-  // 原価表示だけ更新(再描画で入力フォーカスが飛ぶのを防ぐ)
   const card=document.querySelector(`.ingcard[data-idx="${i}"] .subcost b`);
   if(card)card.textContent=yen(ingCost(draftIngs[i]));
   recalcForm();
@@ -374,24 +673,30 @@ function saveItem(){
   if(ings.length===0){alert('食材を1つ以上入れてください');return;}
   const it={menu,price:+f_price.value||0,ings};
   if(editIndex>=0)items[editIndex]=it;else items.push(it);
-  save();closeForm();render();
+  saveMenu();closeForm();render();
 }
 function deleteItem(){
-  if(editIndex>=0&&confirm('このメニューを削除しますか？')){items.splice(editIndex,1);save();closeForm();render();}
+  if(editIndex>=0&&confirm('このメニューを削除しますか？')){items.splice(editIndex,1);saveMenu();closeForm();render();}
 }
-function closeForm(){showPage(currentTab);}
+function closeForm(){showPage('list');}
 
 /* ---- タブ/ページ ---- */
-let currentTab='list';
+let currentTab='stock';
 function switchTab(t){currentTab=t;
   document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('active',el.dataset.tab===t));showPage(t);}
 function showPage(p){
+  document.getElementById('tab-stock').classList.toggle('hide',p!=='stock');
   document.getElementById('tab-list').classList.toggle('hide',p!=='list');
   document.getElementById('tab-calc').classList.toggle('hide',p!=='calc');
   document.getElementById('formPage').classList.toggle('hide',p!=='form');
-  document.getElementById('fab').classList.toggle('hide',p!=='list');
+  document.getElementById('ingFormPage').classList.toggle('hide',p!=='ingform');
+  const fab=document.getElementById('fab');
+  if(p==='stock'){fab.classList.remove('hide');fab.textContent='＋ 食材を登録';}
+  else if(p==='list'){fab.classList.remove('hide');fab.textContent='＋ メニューを追加';}
+  else fab.classList.add('hide');
   window.scrollTo(0,0);
 }
+function fabAction(){ if(currentTab==='stock')openIngForm(); else if(currentTab==='list')openForm(); }
 
 /* ---- 税込計算機 ---- */
 function calcTax(){const net=+c_net.value||0,r=+c_rate1.value,g=net*(1+r/100);
@@ -433,7 +738,10 @@ function exportCSV(){
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
 }
 
+/* ---- 起動 ---- */
 render();calcTax();calcTax2();
+if(window.supabase){initDB();}
+else{setConn('err','在庫ライブラリの読み込みに失敗しました（通信を確認）');}
 </script>
 </body>
 </html>
