@@ -352,6 +352,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
 
 <!-- ========== メニュー一覧 ========== -->
 <div id="tab-list" class="wrap hide">
+  <div id="mConnBar" class="conn off">接続中…</div>
   <div class="sortbar" id="menuSortbar" style="display:none">
     <button id="mSortKana" onclick="setMenuSort('kana')">あいうえお順</button>
     <button id="mSortManual" onclick="setMenuSort('manual')">自分で並べる</button>
@@ -474,6 +475,7 @@ function initDB(){
   document.getElementById('op_name').value=getOperator();
   loadInventory();
   loadRecipes();
+  loadMenus();
   setupRealtime();
 }
 
@@ -515,6 +517,7 @@ function setupRealtime(){
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_lots'},loadInventory)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_logs'},loadInventory)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_recipes'},loadRecipes)
+    .on('postgres_changes',{event:'*',schema:'public',table:'inv_menus'},loadMenus)
     .subscribe();
 }
 
@@ -973,33 +976,48 @@ async function deleteRecipe(){
 }
 
 /* ============================================================
-   メニュー計算（従来どおり localStorage 保存・オフラインOK）
+   メニュー計算（Supabaseで全端末共有。オフライン時はこの端末のキャッシュ表示）
    ============================================================ */
 const DISCOUNTS=[50,40,30,20,15,10,5];
-let items=JSON.parse(localStorage.getItem('izakaya_items_v2')||'null');
+let items=JSON.parse(localStorage.getItem('izakaya_items_v2')||'[]');
+if(!Array.isArray(items))items=[];
 let editIndex=-1;
+let menuLoaded=false;
 
-if(items===null){
-  const old=JSON.parse(localStorage.getItem('izakaya_items')||'[]');
-  if(old.length){
-    items=old.map(o=>({menu:o.menu,price:o.price,
-      ings:[{food:o.food,cost:o.cost,taxrate:o.taxrate,qty:o.qty,unit:o.unit,use:o.use}]}));
-  }else{
-    items=[
-      {menu:'唐揚げ定食',price:880,ings:[
-        {food:'鶏もも肉',cost:1000,taxrate:8,qty:1000,unit:'g',use:150},
-        {food:'米',cost:400,taxrate:8,qty:1000,unit:'g',use:120},
-        {food:'キャベツ',cost:150,taxrate:8,qty:1000,unit:'g',use:60}
-      ]},
-      {menu:'刺身盛り合わせ',price:980,ings:[
-        {food:'マグロ',cost:2500,taxrate:8,qty:1000,unit:'g',use:80},
-        {food:'サーモン',cost:1800,taxrate:8,qty:1000,unit:'g',use:70}
-      ]}
-    ];
+/* localStorage はオフライン用のキャッシュ（＝手元の控え）として使う */
+function cacheMenu(){try{localStorage.setItem('izakaya_items_v2',JSON.stringify(items));}catch(e){}}
+function setMConn(cls,text){const b=document.getElementById('mConnBar');if(b){b.className='conn '+cls;b.textContent=text;}}
+
+let menuBusy=false, menuPending=false;
+async function loadMenus(){
+  if(!db){ setMConn('err','オフライン（この端末の控えを表示中）'); render(); return; }
+  if(menuBusy){ menuPending=true; return; } // 実行中の再入を防ぐ（realtime多重発火・移行の二重挿入対策）
+  menuBusy=true;
+  try{
+    const r=await db.from('inv_menus').select('*');
+    if(r.error){
+      console.error(r.error);
+      setMConn('err','メニュー表が未作成です（supabase_menus.sql を実行してください）');
+      render(); return;
+    }
+    let rows=r.data||[];
+    // 初回移行：クラウドが空で、この端末に控えがあれば一度だけ吸い上げる（正しい価格が入った端末で最初に開くこと）
+    if(rows.length===0 && items.length && !menuLoaded){
+      await Promise.all(items.map((it,i)=>db.from('inv_menus')
+        .insert({menu:it.menu,price:it.price,ings:it.ings,sort_order:(i+1)*10})));
+      const r2=await db.from('inv_menus').select('*');
+      if(!r2.error)rows=r2.data||[];
+    }
+    items=rows.sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    menuLoaded=true;
+    cacheMenu();
+    setMConn('on','🟢 オンライン共有中（変更は全端末に反映されます）');
+    render();
+  }finally{
+    menuBusy=false;
+    if(menuPending){ menuPending=false; loadMenus(); } // 実行中に来た更新をまとめて1回だけ反映
   }
-  saveMenu();
 }
-function saveMenu(){localStorage.setItem('izakaya_items_v2',JSON.stringify(items));}
 
 function ingCost(g){
   const tax=1+(+g.taxrate||0)/100;
@@ -1027,11 +1045,16 @@ function sortedItems(){
   if(menuSort==='kana')arr.sort((a,b)=>String(a.it.menu||'').localeCompare(String(b.it.menu||''),'ja'));
   return arr; // manual＝配列順そのまま
 }
-function moveMenu(i,dir){
+async function moveMenu(i,dir){
   const j=i+dir;
   if(j<0||j>=items.length)return;
   [items[i],items[j]]=[items[j],items[i]];
-  saveMenu();render();
+  items.forEach((it,idx)=>it.sort_order=(idx+1)*10);
+  cacheMenu();render();
+  if(db){
+    await Promise.all(items.filter(it=>it.id).map(it=>
+      db.from('inv_menus').update({sort_order:it.sort_order}).eq('id',it.id)));
+  }
 }
 function render(){
   updateTabCounts();
@@ -1155,17 +1178,38 @@ function openForm(i){
   }
   renderIngs();showPage('form');
 }
-function saveItem(){
+async function saveItem(){
   const menu=f_menu.value.trim();
   if(!menu){alert('メニュー名を入れてください');return;}
   const ings=draftIngs.filter(g=>g.food||g.cost||g.use||g.direct);
   if(ings.length===0){alert('食材を1つ以上入れてください');return;}
-  const it={menu,price:+f_price.value||0,ings};
-  if(editIndex>=0)items[editIndex]=it;else items.push(it);
-  saveMenu();closeForm();render();
+  const price=+f_price.value||0;
+  if(!db){ // オフライン：この端末の控えだけ更新
+    if(editIndex>=0)items[editIndex]={...items[editIndex],menu,price,ings};
+    else items.push({menu,price,ings});
+    cacheMenu();closeForm();render();return;
+  }
+  if(editIndex>=0 && items[editIndex] && items[editIndex].id){
+    const {error}=await db.from('inv_menus')
+      .update({menu,price,ings,updated_at:new Date().toISOString()}).eq('id',items[editIndex].id);
+    if(error){console.error(error);alert('保存に失敗しました（通信を確認してください）');return;}
+  }else{
+    const maxo=items.reduce((m,it)=>Math.max(m,it.sort_order||0),0);
+    const {error}=await db.from('inv_menus').insert({menu,price,ings,sort_order:maxo+10});
+    if(error){console.error(error);alert('保存に失敗しました（通信を確認してください）');return;}
+  }
+  closeForm();await loadMenus();
 }
-function deleteItem(){
-  if(editIndex>=0&&confirm('このメニューを削除しますか？')){items.splice(editIndex,1);saveMenu();closeForm();render();}
+async function deleteItem(){
+  if(editIndex<0)return;
+  if(!confirm('このメニューを削除しますか？'))return;
+  if(!db){items.splice(editIndex,1);cacheMenu();closeForm();render();return;}
+  const it=items[editIndex];
+  if(it&&it.id){
+    const {error}=await db.from('inv_menus').delete().eq('id',it.id);
+    if(error){console.error(error);alert('削除に失敗しました（通信を確認してください）');return;}
+    closeForm();await loadMenus();
+  }else{items.splice(editIndex,1);cacheMenu();closeForm();render();}
 }
 function closeForm(){showPage('list');}
 
