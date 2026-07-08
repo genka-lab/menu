@@ -11,10 +11,14 @@ create table if not exists inv_portions (
   from_amt   text        not null default '',    -- 元の量（例：1kg・1パック・1本）
   to_amt     text        not null default '',    -- 小分け後（例：100g×10袋・8個・4切れ）
   note       text        not null default '',    -- やり方・コツ・メモ（改行OK）
+  hero_url   text        not null default '',    -- 完成写真URL（Storage: recipe-photos）
   sort_order int         not null default 0,     -- 手動並べ替え用
   updated_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
+
+-- 既存テーブルに後から写真列を足す場合もこの1行でOK（何度実行しても安全）
+alter table inv_portions add column if not exists hero_url text not null default '';
 
 alter table inv_portions enable row level security;
 do $$ begin

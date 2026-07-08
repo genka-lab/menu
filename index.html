@@ -193,6 +193,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
 /* ===== ポーション（小分け） ===== */
 .pcard{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--blue);
   border-radius:14px;padding:12px 14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.pcard .pc_hero{width:100%;border-radius:10px;max-height:44vh;object-fit:cover;margin:8px 0 2px;background:#eef1f5;display:block}
 .pcard .pc_top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
 .pcard .pc_name{font-size:17px;font-weight:700;margin:0}
 .pcard .pc_kind{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;background:#e7eef7;color:var(--blue);white-space:nowrap}
@@ -483,6 +484,11 @@ textarea:focus{border-color:var(--blue);background:#fff}
     </div>
     <label>やり方・コツ・メモ（任意・改行OK）</label>
     <textarea id="pf_note" placeholder="例：&#10;・150gずつ計ってラップ→冷凍&#10;・1袋=約3人前"></textarea>
+    <label>完成写真（任意）</label>
+    <div class="uphero" id="pf_hero" onclick="pickPortionHero()">
+      <span>＋ 写真を選ぶ／撮る</span>
+    </div>
+    <input id="pf_hero_file" type="file" accept="image/*" class="hide" onchange="onPortionHeroPick(this)">
     <button class="btn" onclick="savePortion()">保存する</button>
     <button class="btn sub" onclick="showPage('portion')">キャンセル</button>
     <button class="btn danger hide" id="portionDelBtn" onclick="deletePortion()">この小分けを削除</button>
@@ -1319,7 +1325,7 @@ function closeForm(){showPage('list');}
 /* ============================================================
    ポーション（小分け）＝Supabase共有
    ============================================================ */
-let portions=[], portionEditId=null;
+let portions=[], portionEditId=null, draftPortion={heroUrl:'',heroBlob:null,heroPreview:''};
 function setPConn(cls,text){const b=document.getElementById('pConnBar');if(b){b.className='conn '+cls;b.textContent=text;}}
 async function loadPortions(){
   if(!db)return;
@@ -1348,11 +1354,13 @@ function renderPortions(){
         ${(p.from_amt&&p.to_amt)?`<span class="arw">→</span>`:''}
         ${p.to_amt?`<span class="to">${esc(p.to_amt)}</span>`:''}
       </div>`:'';
+    const hero=p.hero_url?`<img class="pc_hero" src="${escA(p.hero_url)}" onclick="lightbox('${escA(p.hero_url)}')">`:'';
     return `<div class="pcard">
       <div class="pc_top">
         <p class="pc_name">${esc(p.name||'(名称なし)')}</p>
         <span class="pc_kind ${dish?'dish':''}">${esc(p.kind||'食材')}</span>
       </div>
+      ${hero}
       ${flow}
       ${p.note?`<div class="pc_note">${esc(p.note)}</div>`:''}
       <button class="pc_edit" onclick="openPortionForm('${p.id}')">✏️ 編集する</button>
@@ -1369,29 +1377,55 @@ function openPortionForm(id){
   pf_from.value=p?p.from_amt:'';
   pf_to.value=p?p.to_amt:'';
   pf_note.value=p?p.note:'';
+  draftPortion={heroUrl:p?p.hero_url||'':'',heroBlob:null,heroPreview:''};
+  renderPortionHeroUI();
   showPage('portionform');
+}
+function renderPortionHeroUI(){
+  const src=draftPortion.heroPreview||draftPortion.heroUrl;
+  document.getElementById('pf_hero').innerHTML=src
+    ?`<img src="${escA(src)}"><button class="rm" onclick="event.stopPropagation();removePortionHero()">削除</button>`
+    :`<span>＋ 写真を選ぶ／撮る</span>`;
+}
+function pickPortionHero(){document.getElementById('pf_hero_file').click();}
+function removePortionHero(){draftPortion.heroUrl='';draftPortion.heroBlob=null;draftPortion.heroPreview='';renderPortionHeroUI();}
+async function onPortionHeroPick(input){
+  const f=input.files&&input.files[0];input.value='';if(!f)return;
+  try{const b=await compressImage(f);draftPortion.heroBlob=b;draftPortion.heroPreview=URL.createObjectURL(b);renderPortionHeroUI();}
+  catch(e){alert(e.message);}
 }
 async function savePortion(){
   if(!db){alert('接続がありません');return;}
   const name=pf_name.value.trim();
   if(!name){alert('品名を入れてください');return;}
-  const row={name,kind:pf_kind.value,from_amt:pf_from.value.trim(),to_amt:pf_to.value.trim(),note:pf_note.value.trim()};
-  if(portionEditId){
-    const res=await db.from('inv_portions').update({...row,updated_at:new Date().toISOString()}).eq('id',portionEditId);
-    if(res.error){console.error(res.error);alert('保存に失敗しました（通信を確認してください）');return;}
-  }else{
-    const maxo=portions.reduce((m,p)=>Math.max(m,p.sort_order||0),0);
-    const res=await db.from('inv_portions').insert({...row,sort_order:maxo+10});
-    if(res.error){console.error(res.error);alert('保存に失敗しました（通信を確認してください）');return;}
-  }
-  showPage('portion');loadPortions();
+  showSaving(true);
+  try{
+    const base={name,kind:pf_kind.value,from_amt:pf_from.value.trim(),to_amt:pf_to.value.trim(),note:pf_note.value.trim()};
+    let id=portionEditId;
+    if(!id){
+      const maxo=portions.reduce((m,p)=>Math.max(m,p.sort_order||0),0);
+      const ins=await db.from('inv_portions').insert({...base,sort_order:maxo+10}).select().single();
+      if(ins.error)throw ins.error;
+      id=ins.data.id;
+    }
+    let heroUrl=draftPortion.heroUrl||'';
+    if(draftPortion.heroBlob)heroUrl=await uploadPhoto(id,draftPortion.heroBlob);
+    const upd=await db.from('inv_portions').update({...base,hero_url:heroUrl,updated_at:new Date().toISOString()}).eq('id',id);
+    if(upd.error)throw upd.error;
+    showSaving(false);showPage('portion');loadPortions();
+  }catch(e){console.error(e);showSaving(false);alert('保存に失敗しました：'+(e.message||e));}
 }
 async function deletePortion(){
   if(!portionEditId||!db)return;
-  if(!confirm('この小分けメモを削除しますか？'))return;
-  const {error}=await db.from('inv_portions').delete().eq('id',portionEditId);
-  if(error){console.error(error);alert('削除に失敗しました');return;}
-  showPage('portion');loadPortions();
+  if(!confirm('この小分けメモを削除しますか？（写真も一緒に消えます）'))return;
+  showSaving(true);
+  try{
+    const {data:files}=await db.storage.from('recipe-photos').list(portionEditId);
+    if(files&&files.length)await db.storage.from('recipe-photos').remove(files.map(f=>`${portionEditId}/${f.name}`));
+    const {error}=await db.from('inv_portions').delete().eq('id',portionEditId);
+    if(error)throw error;
+    showSaving(false);showPage('portion');loadPortions();
+  }catch(e){console.error(e);showSaving(false);alert('削除に失敗しました：'+(e.message||e));}
 }
 
 /* ============================================================
