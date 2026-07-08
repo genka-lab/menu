@@ -23,7 +23,7 @@ header{background:linear-gradient(135deg,var(--navy),var(--blue));color:#fff;
 header h1{margin:0;font-size:18px;font-weight:700}
 header p{margin:2px 0 0;font-size:12px;opacity:.85}
 .tabs{display:flex;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:64px;z-index:15}
-.tab{flex:1;text-align:center;padding:12px 4px;font-size:14px;font-weight:600;color:var(--sub);border-bottom:3px solid transparent}
+.tab{flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:600;color:var(--sub);border-bottom:3px solid transparent;white-space:nowrap}
 .tab.active{color:var(--navy);border-bottom-color:var(--navy)}
 .cnt{display:none;margin-left:5px;min-width:18px;padding:1px 6px;border-radius:999px;background:var(--line);color:var(--sub);font-size:11px;font-weight:700;vertical-align:middle}
 .cnt.show{display:inline-block}
@@ -190,6 +190,31 @@ textarea:focus{border-color:var(--blue);background:#fff}
 .lightbox img{max-width:100%;max-height:100%;border-radius:8px}
 .lightbox .x{position:absolute;top:16px;right:16px;color:#fff;font-size:30px;background:none;border:none}
 .saving{position:fixed;inset:0;z-index:9997;background:rgba(255,255,255,.7);display:none;align-items:center;justify-content:center;font-weight:700;color:var(--navy)}
+/* ===== ポーション（小分け） ===== */
+.pcard{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--blue);
+  border-radius:14px;padding:12px 14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.pcard .pc_top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.pcard .pc_name{font-size:17px;font-weight:700;margin:0}
+.pcard .pc_kind{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;background:#e7eef7;color:var(--blue);white-space:nowrap}
+.pcard .pc_kind.dish{background:#fdeede;color:var(--orange)}
+.pcard .pc_flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0 2px;font-weight:800}
+.pcard .pc_flow .from{font-size:16px;color:var(--sub)}
+.pcard .pc_flow .arw{font-size:16px;color:var(--blue)}
+.pcard .pc_flow .to{font-size:20px;color:var(--navy)}
+.pcard .pc_note{font-size:13px;color:var(--sub);white-space:pre-wrap;margin-top:6px;line-height:1.6}
+.pcard .pc_edit{margin-top:10px;width:100%;padding:9px;font-size:13px;font-weight:700;border-radius:10px;border:1.5px solid var(--line);background:#fff;color:var(--sub)}
+/* ===== 取引先業者 ===== */
+.supcard{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--green);
+  border-radius:14px;padding:12px 14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.supcard .sp_name{font-size:18px;font-weight:700;margin:0 0 8px}
+.supcard .sp_items{font-size:11px;font-weight:700;color:var(--green);background:#e7f4ec;
+  display:inline-block;padding:2px 9px;border-radius:20px;margin-left:8px;vertical-align:middle}
+.supcard .sp_row{display:flex;gap:8px;font-size:14px;padding:4px 0;align-items:baseline}
+.supcard .sp_row .lb{flex:0 0 66px;font-size:12px;color:var(--sub);font-weight:700}
+.supcard .sp_row .vl{flex:1;color:var(--ink);white-space:pre-wrap;line-height:1.6}
+.supcard .sp_tel{display:inline-block;color:var(--green);font-weight:800;font-size:16px;text-decoration:none;
+  border:1.5px solid var(--greenline);border-radius:9px;padding:2px 12px;background:#f2faf5}
+.supcard .sp_edit{margin-top:10px;width:100%;padding:9px;font-size:13px;font-weight:700;border-radius:10px;border:1.5px solid var(--line);background:#fff;color:var(--sub)}
 </style>
 </head>
 <body>
@@ -217,6 +242,8 @@ textarea:focus{border-color:var(--blue);background:#fff}
   <div class="tab active" data-tab="stock" onclick="switchTab('stock')">📦在庫<span class="cnt" id="cnt-stock"></span></div>
   <div class="tab" data-tab="recipe" onclick="switchTab('recipe')">📖レシピ<span class="cnt" id="cnt-recipe"></span></div>
   <div class="tab" data-tab="list" onclick="switchTab('list')">🍽メニュー<span class="cnt" id="cnt-list"></span></div>
+  <div class="tab" data-tab="portion" onclick="switchTab('portion')">🔪小分け<span class="cnt" id="cnt-portion"></span></div>
+  <div class="tab" data-tab="supplier" onclick="switchTab('supplier')">🏢取引先<span class="cnt" id="cnt-supplier"></span></div>
   <div class="tab" data-tab="calc" onclick="switchTab('calc')">🧮税込</div>
 </div>
 
@@ -364,6 +391,26 @@ textarea:focus{border-color:var(--blue);background:#fff}
   </div>
 </div>
 
+<!-- ========== ポーション（小分け）一覧 ========== -->
+<div id="tab-portion" class="wrap hide">
+  <div id="pConnBar" class="conn off">接続中…</div>
+  <input id="pSearch" placeholder="🔍 品名で検索（一部だけでOK）" oninput="renderPortions()" style="margin-bottom:12px">
+  <div id="portionList"></div>
+  <div id="portionEmpty" class="empty" style="display:none">
+    まだ小分けメモがありません。<br>下の「＋ 小分けを登録」から追加してください。
+  </div>
+</div>
+
+<!-- ========== 取引先業者 一覧 ========== -->
+<div id="tab-supplier" class="wrap hide">
+  <div id="supConnBar" class="conn off">接続中…</div>
+  <input id="supSearch" placeholder="🔍 会社名・品目で検索（一部だけでOK）" oninput="renderSuppliers()" style="margin-bottom:12px">
+  <div id="supplierList"></div>
+  <div id="supplierEmpty" class="empty" style="display:none">
+    まだ取引先が登録されていません。<br>下の「＋ 取引先を登録」から追加してください。
+  </div>
+</div>
+
 <!-- ========== 税込計算機 ========== -->
 <div id="tab-calc" class="wrap hide">
   <div class="card">
@@ -413,6 +460,56 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <button class="btn" onclick="saveItem()">保存する</button>
     <button class="btn sub" onclick="closeForm()">キャンセル</button>
     <button class="btn danger hide" id="delBtn" onclick="deleteItem()">このメニューを削除</button>
+  </div>
+</div>
+
+<!-- ========== 小分け 登録/編集フォーム ========== -->
+<div id="portionFormPage" class="wrap hide">
+  <div class="card">
+    <h2 class="sec" id="portionFormTitle">＋ 小分けを登録</h2>
+    <label>品名（食材・料理）</label>
+    <input id="pf_name" placeholder="例：鶏もも肉／ポテトサラダ">
+    <label>種別</label>
+    <select id="pf_kind"><option>食材</option><option>料理</option></select>
+    <div class="row2">
+      <div>
+        <label>元の量・単位</label>
+        <input id="pf_from" placeholder="例：1kg・1パック・1本">
+      </div>
+      <div>
+        <label>小分け後</label>
+        <input id="pf_to" placeholder="例：100g×10・8個・4切れ">
+      </div>
+    </div>
+    <label>やり方・コツ・メモ（任意・改行OK）</label>
+    <textarea id="pf_note" placeholder="例：&#10;・150gずつ計ってラップ→冷凍&#10;・1袋=約3人前"></textarea>
+    <button class="btn" onclick="savePortion()">保存する</button>
+    <button class="btn sub" onclick="showPage('portion')">キャンセル</button>
+    <button class="btn danger hide" id="portionDelBtn" onclick="deletePortion()">この小分けを削除</button>
+  </div>
+</div>
+
+<!-- ========== 取引先 登録/編集フォーム ========== -->
+<div id="supplierFormPage" class="wrap hide">
+  <div class="card">
+    <h2 class="sec" id="supplierFormTitle">＋ 取引先を登録</h2>
+    <label>会社名・業者名</label>
+    <input id="sf_name" placeholder="例：〇〇水産">
+    <label>電話番号</label>
+    <input id="sf_phone" type="tel" inputmode="tel" placeholder="例：03-1234-5678">
+    <label>営業時間</label>
+    <input id="sf_hours" placeholder="例：平日9:00-18:00／日祝休">
+    <label>発注方法（任意・改行OK）</label>
+    <textarea id="sf_orderway" placeholder="例：&#10;・電話 or LINEで前日16時まで&#10;・FAX注文書は毎週金曜"></textarea>
+    <div class="row2">
+      <div><label>担当者（任意）</label><input id="sf_contact" placeholder="例：山田さん"></div>
+      <div><label>取扱品目（任意）</label><input id="sf_items" placeholder="例：鮮魚・貝類"></div>
+    </div>
+    <label>メモ（任意・最低ロット／締め時間など）</label>
+    <input id="sf_note" placeholder="例：1万円以上で送料無料">
+    <button class="btn" onclick="saveSupplier()">保存する</button>
+    <button class="btn sub" onclick="showPage('supplier')">キャンセル</button>
+    <button class="btn danger hide" id="supplierDelBtn" onclick="deleteSupplier()">この取引先を削除</button>
   </div>
 </div>
 
@@ -476,6 +573,8 @@ function initDB(){
   loadInventory();
   loadRecipes();
   loadMenus();
+  loadPortions();
+  loadSuppliers();
   setupRealtime();
 }
 
@@ -518,6 +617,8 @@ function setupRealtime(){
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_logs'},loadInventory)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_recipes'},loadRecipes)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_menus'},loadMenus)
+    .on('postgres_changes',{event:'*',schema:'public',table:'inv_portions'},loadPortions)
+    .on('postgres_changes',{event:'*',schema:'public',table:'inv_suppliers'},loadSuppliers)
     .subscribe();
 }
 
@@ -577,6 +678,8 @@ function updateTabCounts(){
   setTabCount('cnt-stock',(typeof ingredients!=='undefined'?ingredients:[]).length);
   setTabCount('cnt-recipe',(typeof recipes!=='undefined'?recipes:[]).length);
   setTabCount('cnt-list',(typeof items!=='undefined'&&items?items:[]).length);
+  setTabCount('cnt-portion',(typeof portions!=='undefined'?portions:[]).length);
+  setTabCount('cnt-supplier',(typeof suppliers!=='undefined'?suppliers:[]).length);
 }
 function renderInventory(){
   updateTabCounts();
@@ -1213,6 +1316,162 @@ async function deleteItem(){
 }
 function closeForm(){showPage('list');}
 
+/* ============================================================
+   ポーション（小分け）＝Supabase共有
+   ============================================================ */
+let portions=[], portionEditId=null;
+function setPConn(cls,text){const b=document.getElementById('pConnBar');if(b){b.className='conn '+cls;b.textContent=text;}}
+async function loadPortions(){
+  if(!db)return;
+  const r=await db.from('inv_portions').select('*');
+  if(r.error){console.error(r.error);setPConn('err','小分け表が未作成です（supabase_portions.sql を実行してください）');return;}
+  portions=r.data||[];
+  setPConn('on','🟢 オンライン共有中（小分けメモは全員で共有）');
+  renderPortions();
+}
+function sortedPortions(){
+  return [...portions].sort((a,b)=>((a.sort_order||0)-(b.sort_order||0))||String(a.name||'').localeCompare(String(b.name||''),'ja'));
+}
+function renderPortions(){
+  updateTabCounts();
+  document.getElementById('portionEmpty').style.display=portions.length?'none':'block';
+  const q=normJa(document.getElementById('pSearch').value);
+  let list=sortedPortions();
+  if(q)list=list.filter(p=>normJa([p.name,p.from_amt,p.to_amt,p.note].join(' ')).includes(q));
+  if(q&&!list.length&&portions.length){
+    document.getElementById('portionList').innerHTML='<div class="empty">一致する小分けメモはありません。</div>';return;
+  }
+  document.getElementById('portionList').innerHTML=list.map(p=>{
+    const dish=p.kind==='料理';
+    const flow=(p.from_amt||p.to_amt)?`<div class="pc_flow">
+        ${p.from_amt?`<span class="from">${esc(p.from_amt)}</span>`:''}
+        ${(p.from_amt&&p.to_amt)?`<span class="arw">→</span>`:''}
+        ${p.to_amt?`<span class="to">${esc(p.to_amt)}</span>`:''}
+      </div>`:'';
+    return `<div class="pcard">
+      <div class="pc_top">
+        <p class="pc_name">${esc(p.name||'(名称なし)')}</p>
+        <span class="pc_kind ${dish?'dish':''}">${esc(p.kind||'食材')}</span>
+      </div>
+      ${flow}
+      ${p.note?`<div class="pc_note">${esc(p.note)}</div>`:''}
+      <button class="pc_edit" onclick="openPortionForm('${p.id}')">✏️ 編集する</button>
+    </div>`;
+  }).join('');
+}
+function openPortionForm(id){
+  portionEditId=id||null;
+  document.getElementById('portionFormTitle').textContent=id?'小分けを編集':'＋ 小分けを登録';
+  document.getElementById('portionDelBtn').classList.toggle('hide',!id);
+  const p=id?portions.find(x=>x.id===id):null;
+  pf_name.value=p?p.name:'';
+  pf_kind.value=p?p.kind:'食材';
+  pf_from.value=p?p.from_amt:'';
+  pf_to.value=p?p.to_amt:'';
+  pf_note.value=p?p.note:'';
+  showPage('portionform');
+}
+async function savePortion(){
+  if(!db){alert('接続がありません');return;}
+  const name=pf_name.value.trim();
+  if(!name){alert('品名を入れてください');return;}
+  const row={name,kind:pf_kind.value,from_amt:pf_from.value.trim(),to_amt:pf_to.value.trim(),note:pf_note.value.trim()};
+  if(portionEditId){
+    const res=await db.from('inv_portions').update({...row,updated_at:new Date().toISOString()}).eq('id',portionEditId);
+    if(res.error){console.error(res.error);alert('保存に失敗しました（通信を確認してください）');return;}
+  }else{
+    const maxo=portions.reduce((m,p)=>Math.max(m,p.sort_order||0),0);
+    const res=await db.from('inv_portions').insert({...row,sort_order:maxo+10});
+    if(res.error){console.error(res.error);alert('保存に失敗しました（通信を確認してください）');return;}
+  }
+  showPage('portion');loadPortions();
+}
+async function deletePortion(){
+  if(!portionEditId||!db)return;
+  if(!confirm('この小分けメモを削除しますか？'))return;
+  const {error}=await db.from('inv_portions').delete().eq('id',portionEditId);
+  if(error){console.error(error);alert('削除に失敗しました');return;}
+  showPage('portion');loadPortions();
+}
+
+/* ============================================================
+   取引先業者＝Supabase共有
+   ============================================================ */
+let suppliers=[], supplierEditId=null;
+function setSupConn(cls,text){const b=document.getElementById('supConnBar');if(b){b.className='conn '+cls;b.textContent=text;}}
+async function loadSuppliers(){
+  if(!db)return;
+  const r=await db.from('inv_suppliers').select('*');
+  if(r.error){console.error(r.error);setSupConn('err','取引先表が未作成です（supabase_suppliers.sql を実行してください）');return;}
+  suppliers=r.data||[];
+  setSupConn('on','🟢 オンライン共有中（取引先は全員で共有）');
+  renderSuppliers();
+}
+function sortedSuppliers(){
+  return [...suppliers].sort((a,b)=>((a.sort_order||0)-(b.sort_order||0))||String(a.name||'').localeCompare(String(b.name||''),'ja'));
+}
+function telHref(p){return String(p||'').replace(/[^0-9+]/g,'');}
+function renderSuppliers(){
+  updateTabCounts();
+  document.getElementById('supplierEmpty').style.display=suppliers.length?'none':'block';
+  const q=normJa(document.getElementById('supSearch').value);
+  let list=sortedSuppliers();
+  if(q)list=list.filter(s=>normJa([s.name,s.items,s.contact,s.note].join(' ')).includes(q));
+  if(q&&!list.length&&suppliers.length){
+    document.getElementById('supplierList').innerHTML='<div class="empty">一致する取引先はありません。</div>';return;
+  }
+  const row=(lb,vl,raw)=>vl?`<div class="sp_row"><span class="lb">${lb}</span><span class="vl">${raw||esc(vl)}</span></div>`:'';
+  document.getElementById('supplierList').innerHTML=list.map(s=>{
+    const tel=s.phone?`<a class="sp_tel" href="tel:${escA(telHref(s.phone))}">📞 ${esc(s.phone)}</a>`:'';
+    return `<div class="supcard">
+      <p class="sp_name">${esc(s.name||'(名称なし)')}${s.items?`<span class="sp_items">${esc(s.items)}</span>`:''}</p>
+      ${row('電話',s.phone,tel)}
+      ${row('営業時間',s.hours)}
+      ${row('発注方法',s.order_way)}
+      ${row('担当',s.contact)}
+      ${row('メモ',s.note)}
+      <button class="sp_edit" onclick="openSupplierForm('${s.id}')">✏️ 編集する</button>
+    </div>`;
+  }).join('');
+}
+function openSupplierForm(id){
+  supplierEditId=id||null;
+  document.getElementById('supplierFormTitle').textContent=id?'取引先を編集':'＋ 取引先を登録';
+  document.getElementById('supplierDelBtn').classList.toggle('hide',!id);
+  const s=id?suppliers.find(x=>x.id===id):null;
+  sf_name.value=s?s.name:'';
+  sf_phone.value=s?s.phone:'';
+  sf_hours.value=s?s.hours:'';
+  sf_orderway.value=s?s.order_way:'';
+  sf_contact.value=s?s.contact:'';
+  sf_items.value=s?s.items:'';
+  sf_note.value=s?s.note:'';
+  showPage('supplierform');
+}
+async function saveSupplier(){
+  if(!db){alert('接続がありません');return;}
+  const name=sf_name.value.trim();
+  if(!name){alert('会社名を入れてください');return;}
+  const row={name,phone:sf_phone.value.trim(),hours:sf_hours.value.trim(),order_way:sf_orderway.value.trim(),
+    contact:sf_contact.value.trim(),items:sf_items.value.trim(),note:sf_note.value.trim()};
+  if(supplierEditId){
+    const res=await db.from('inv_suppliers').update({...row,updated_at:new Date().toISOString()}).eq('id',supplierEditId);
+    if(res.error){console.error(res.error);alert('保存に失敗しました（通信を確認してください）');return;}
+  }else{
+    const maxo=suppliers.reduce((m,s)=>Math.max(m,s.sort_order||0),0);
+    const res=await db.from('inv_suppliers').insert({...row,sort_order:maxo+10});
+    if(res.error){console.error(res.error);alert('保存に失敗しました（通信を確認してください）');return;}
+  }
+  showPage('supplier');loadSuppliers();
+}
+async function deleteSupplier(){
+  if(!supplierEditId||!db)return;
+  if(!confirm('この取引先を削除しますか？'))return;
+  const {error}=await db.from('inv_suppliers').delete().eq('id',supplierEditId);
+  if(error){console.error(error);alert('削除に失敗しました');return;}
+  showPage('supplier');loadSuppliers();
+}
+
 /* ---- タブ/ページ ---- */
 let currentTab='stock';
 function switchTab(t){currentTab=t;
@@ -1221,16 +1480,22 @@ function showPage(p){
   document.getElementById('tab-stock').classList.toggle('hide',p!=='stock');
   document.getElementById('tab-recipe').classList.toggle('hide',p!=='recipe');
   document.getElementById('tab-list').classList.toggle('hide',p!=='list');
+  document.getElementById('tab-portion').classList.toggle('hide',p!=='portion');
+  document.getElementById('tab-supplier').classList.toggle('hide',p!=='supplier');
   document.getElementById('tab-calc').classList.toggle('hide',p!=='calc');
   document.getElementById('formPage').classList.toggle('hide',p!=='form');
   document.getElementById('ingFormPage').classList.toggle('hide',p!=='ingform');
   document.getElementById('lotFormPage').classList.toggle('hide',p!=='lotform');
   document.getElementById('recipeDetailPage').classList.toggle('hide',p!=='rdetail');
   document.getElementById('recipeFormPage').classList.toggle('hide',p!=='recipeform');
+  document.getElementById('portionFormPage').classList.toggle('hide',p!=='portionform');
+  document.getElementById('supplierFormPage').classList.toggle('hide',p!=='supplierform');
   const fab=document.getElementById('fab');
   if(p==='stock'){fab.classList.remove('hide');fab.textContent='＋ 食材を登録';}
   else if(p==='recipe'){fab.classList.remove('hide');fab.textContent='＋ レシピを登録';}
   else if(p==='list'){fab.classList.remove('hide');fab.textContent='＋ メニューを追加';}
+  else if(p==='portion'){fab.classList.remove('hide');fab.textContent='＋ 小分けを登録';}
+  else if(p==='supplier'){fab.classList.remove('hide');fab.textContent='＋ 取引先を登録';}
   else fab.classList.add('hide');
   window.scrollTo(0,0);
 }
@@ -1238,6 +1503,8 @@ function fabAction(){
   if(currentTab==='stock')openIngForm();
   else if(currentTab==='recipe')openRecipeForm();
   else if(currentTab==='list')openForm();
+  else if(currentTab==='portion')openPortionForm();
+  else if(currentTab==='supplier')openSupplierForm();
 }
 
 /* ---- 税込計算機 ---- */
