@@ -243,6 +243,40 @@ textarea:focus{border-color:var(--blue);background:#fff}
 .supcard .sp_tel{display:inline-block;color:var(--green);font-weight:800;font-size:16px;text-decoration:none;
   border:1.5px solid var(--greenline);border-radius:9px;padding:2px 12px;background:#f2faf5}
 .supcard .sp_edit{margin-top:10px;width:100%;padding:9px;font-size:13px;font-weight:700;border-radius:10px;border:1.5px solid var(--line);background:#fff;color:var(--sub)}
+/* ===== 引き継ぎ連絡 通知バー（全タブ共通・未確認があると出続ける） ===== */
+.notifybar{position:sticky;top:110px;z-index:14;display:none;margin:0;padding:11px 14px;
+  background:#fff4d6;border-bottom:2px solid #f0c040;color:#8a5a00;font-size:13.5px;font-weight:700;
+  line-height:1.5;box-shadow:0 3px 8px rgba(0,0,0,.08);cursor:pointer;animation:notifpulse 2s ease-in-out infinite}
+.notifybar.show{display:block}
+.notifybar.mine{background:#ffe1e1;border-bottom-color:#e07070;color:#a12626}
+.notifybar .nb_go{float:right;font-size:12px;background:rgba(0,0,0,.06);padding:2px 9px;border-radius:999px;margin-left:8px}
+@keyframes notifpulse{0%,100%{background-color:#fff4d6}50%{background-color:#ffe9a8}}
+.notifybar.mine{animation:none}
+/* ===== 引き継ぎカード ===== */
+.hocard{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--line);
+  border-radius:14px;padding:12px 14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.hocard.unread{border-left-color:#f0c040;background:#fffdf3}
+.hocard.mine{border-left-color:var(--red);background:#fff7f6}
+.ho_top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.ho_who{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:15px;font-weight:700}
+.ho_who .frm{color:var(--sub)}
+.ho_who .arw{color:var(--blue)}
+.ho_who .to{color:var(--navy);background:#e7eef7;border-radius:999px;padding:1px 10px}
+.hocard.mine .ho_who .to{color:var(--red);background:#ffe1e1}
+.ho_date{font-size:12px;color:var(--sub);white-space:nowrap;flex:0 0 auto}
+.ho_badge{display:inline-block;font-size:11px;font-weight:800;padding:2px 9px;border-radius:999px;white-space:nowrap}
+.ho_badge.un{background:#ffe08a;color:#8a5a00}
+.ho_badge.ok{background:#e2efda;color:var(--green)}
+.ho_body{font-size:15px;color:var(--ink);white-space:pre-wrap;line-height:1.7;margin-top:9px}
+.ho_gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.ho_gallery figure{margin:0}
+.ho_gallery img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;background:#eef1f5}
+.ho_gallery figcaption{font-size:11px;color:var(--sub);margin-top:3px;text-align:center;line-height:1.3}
+.ho_read{margin-top:12px;width:100%;padding:14px;font-size:16px;font-weight:800;border-radius:12px;
+  border:none;background:var(--green);color:#fff}
+.ho_readinfo{margin-top:10px;font-size:13px;color:var(--green);font-weight:700;background:#eef7f0;
+  border:1px solid var(--greenline);border-radius:10px;padding:8px 10px}
+.ho_edit{margin-top:8px;width:100%;padding:9px;font-size:13px;font-weight:700;border-radius:10px;border:1.5px solid var(--line);background:#fff;color:var(--sub)}
 </style>
 </head>
 <body>
@@ -273,8 +307,12 @@ textarea:focus{border-color:var(--blue);background:#fff}
   <div class="tab" data-tab="portion" onclick="switchTab('portion')">🔪小分け<span class="cnt" id="cnt-portion"></span></div>
   <div class="tab" data-tab="supplier" onclick="switchTab('supplier')">🏢取引先<span class="cnt" id="cnt-supplier"></span></div>
   <div class="tab" data-tab="guide" onclick="switchTab('guide')">📋業務<span class="cnt" id="cnt-guide"></span></div>
+  <div class="tab" data-tab="handover" onclick="switchTab('handover')">📨引き継ぎ<span class="cnt" id="cnt-handover"></span></div>
   <div class="tab" data-tab="calc" onclick="switchTab('calc')">🧮税込</div>
 </div>
+
+<!-- ========== 未確認の引き継ぎ通知バー（全タブ共通で出続ける） ========== -->
+<div id="notifyBar" class="notifybar" onclick="goHandover()"></div>
 
 <!-- ========== 在庫管理 ========== -->
 <div id="tab-stock" class="wrap">
@@ -445,6 +483,42 @@ textarea:focus{border-color:var(--blue);background:#fff}
   <div id="gConnBar" class="conn off">接続中…</div>
   <div class="segbar" id="guideSeg"></div>
   <div id="guideBody"></div>
+</div>
+
+<!-- ========== 引き継ぎ連絡 一覧 ========== -->
+<div id="tab-handover" class="wrap hide">
+  <div id="hoConnBar" class="conn off">接続中…</div>
+  <div class="opbar">
+    <label>あなたの名前</label>
+    <input id="ho_op_name" placeholder="例：たなか" oninput="setOperator(this.value)">
+  </div>
+  <input id="hoSearch" placeholder="🔍 名前・内容で検索（一部だけでOK）" oninput="renderHandovers()" style="margin-bottom:12px">
+  <div id="handoverList"></div>
+  <div id="handoverEmpty" class="empty" style="display:none">
+    まだ引き継ぎ連絡がありません。<br>下の「＋ 引き継ぎを登録」から追加してください。
+  </div>
+</div>
+
+<!-- ========== 引き継ぎ 登録/編集フォーム ========== -->
+<div id="handoverFormPage" class="wrap hide">
+  <div class="card">
+    <h2 class="sec" id="handoverFormTitle">＋ 引き継ぎを登録</h2>
+    <div class="row2">
+      <div><label>誰から（引き継ぐ人）</label><input id="hf_from" placeholder="例：たなか"></div>
+      <div><label>誰宛て（受け取る人）</label><input id="hf_to" placeholder="例：やまだ／全員"></div>
+    </div>
+    <div class="note">「誰宛て」を空欄にすると「全員」宛てになります。</div>
+    <label>📅 日付</label>
+    <input id="hf_date" type="date">
+    <label>業務連絡・引き継ぎ内容（改行OK）</label>
+    <textarea id="hf_body" placeholder="例：&#10;・冷蔵庫の卵、明日で期限切れなので先に使ってください&#10;・〇〇様から予約変更の電話あり（4名→6名）"></textarea>
+    <label>写真（何枚でもOK・下に説明を書けます）</label>
+    <div class="pgrid" id="hf_photos"></div>
+    <input id="hf_photo_file" type="file" accept="image/*" class="hide" onchange="onHandoverPick(this)">
+    <button class="btn" onclick="saveHandover()">保存する</button>
+    <button class="btn sub" onclick="showPage('handover')">キャンセル</button>
+    <button class="btn danger hide" id="handoverDelBtn" onclick="deleteHandover()">この引き継ぎを削除</button>
+  </div>
 </div>
 
 <!-- ========== 税込計算機 ========== -->
@@ -645,19 +719,30 @@ let db=null, ingredients=[], logs=[], ingEditId=null;
 
 function setConn(cls,text){const b=document.getElementById('connBar');b.className='conn '+cls;b.textContent=text;}
 function getOperator(){return localStorage.getItem('inv_operator')||'';}
-function setOperator(v){localStorage.setItem('inv_operator',v);}
+function setOperator(v){
+  localStorage.setItem('inv_operator',v);
+  // 在庫タブと引き継ぎタブの「あなたの名前」欄を同期
+  const a=document.getElementById('op_name'),b=document.getElementById('ho_op_name');
+  if(a&&a.value!==v)a.value=v;
+  if(b&&b.value!==v)b.value=v;
+  // 名前が変わると「自分宛て」判定も変わるので通知バーと一覧を更新
+  if(typeof renderNotifyBar==='function')renderNotifyBar();
+  if(typeof handovers!=='undefined'&&handovers.length&&typeof renderHandovers==='function')renderHandovers();
+}
 
 function initDB(){
   try{
     db=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
   }catch(e){ setConn('err','在庫の接続に失敗（ライブラリ未読込）'); return; }
   document.getElementById('op_name').value=getOperator();
+  const hoName=document.getElementById('ho_op_name');if(hoName)hoName.value=getOperator();
   loadInventory();
   loadRecipes();
   loadMenus();
   loadPortions();
   loadSuppliers();
   loadGuides();
+  loadHandovers();
   setupRealtime();
 }
 
@@ -704,6 +789,7 @@ function setupRealtime(){
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_suppliers'},loadSuppliers)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_guides'},loadGuides)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_garbage'},loadGuides)
+    .on('postgres_changes',{event:'*',schema:'public',table:'inv_handovers'},loadHandovers)
     .subscribe();
 }
 
@@ -766,6 +852,7 @@ function updateTabCounts(){
   setTabCount('cnt-portion',(typeof portions!=='undefined'?portions:[]).length);
   setTabCount('cnt-supplier',(typeof suppliers!=='undefined'?suppliers:[]).length);
   setTabCount('cnt-guide',(typeof guides!=='undefined'?guides:[]).length);
+  setTabCount('cnt-handover',(typeof handovers!=='undefined'?handovers.filter(h=>!h.done).length:0));
 }
 function renderInventory(){
   updateTabCounts();
@@ -1768,6 +1855,196 @@ function updateFabForGuide(){
   else{fab.classList.remove('hide');fab.textContent='＋ 登録';}
 }
 
+/* ============================================================
+   引き継ぎ連絡＝Supabase共有。未確認は全タブ共通の通知バーで知らせる。
+   写真はStorage(recipe-photos)を共用。
+   ============================================================ */
+let handovers=[], handoverEditId=null, draftHandover={photos:[]};
+function setHoConn(cls,text){const b=document.getElementById('hoConnBar');if(b){b.className='conn '+cls;b.textContent=text;}}
+async function loadHandovers(){
+  if(!db)return;
+  const r=await db.from('inv_handovers').select('*');
+  if(r.error){console.error(r.error);setHoConn('err','引き継ぎ表が未作成です（supabase_handovers.sql を実行してください）');return;}
+  handovers=r.data||[];
+  setHoConn('on','🟢 オンライン共有中（引き継ぎは全員で共有）');
+  renderHandovers();
+  renderNotifyBar();
+}
+/* 未確認→新しい順を上に、確認済→新しい順を下に */
+function sortedHandovers(){
+  return [...handovers].sort((a,b)=>{
+    if(!!a.done!==!!b.done)return a.done?1:-1;
+    return String(b.created_at||'').localeCompare(String(a.created_at||''));
+  });
+}
+function hoDateLabel(ymd){if(!ymd)return '';const p=String(ymd).split('-');return p.length===3?`${+p[0]}/${+p[1]}/${+p[2]}`:esc(ymd);}
+function hoReadLabel(iso){
+  if(!iso)return '';const d=new Date(iso);if(isNaN(d))return '';
+  const p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+/* 宛先が「全員（みんな）」向けか */
+function hoIsBroadcast(h){const t=normJa(h.to_name);return !t||t.includes('全員')||t.includes('みんな');}
+/* この引き継ぎが今の操作者（あなた）宛てか */
+function hoForMe(h){
+  const me=normJa(getOperator());
+  if(!me)return false;
+  if(hoIsBroadcast(h))return true;
+  return normJa(h.to_name).includes(me);
+}
+function hoToLabel(h){const t=(h.to_name||'').trim();return t?(hoIsBroadcast(h)?esc(t):esc(t)):'全員';}
+function renderHandovers(){
+  updateTabCounts();
+  const box=document.getElementById('handoverList');if(!box)return;
+  document.getElementById('handoverEmpty').style.display=handovers.length?'none':'block';
+  const q=normJa(document.getElementById('hoSearch').value);
+  let list=sortedHandovers();
+  if(q)list=list.filter(h=>normJa([h.from_name,h.to_name,h.body].join(' ')).includes(q));
+  if(q&&!list.length&&handovers.length){
+    box.innerHTML='<div class="empty">一致する引き継ぎはありません。</div>';return;
+  }
+  const op=getOperator();
+  box.innerHTML=list.map(h=>{
+    const mine=op&&hoForMe(h);
+    let cls='hocard';
+    if(!h.done)cls+= mine?' mine':' unread';
+    const badge=h.done?'<span class="ho_badge ok">✔ 確認済</span>':'<span class="ho_badge un">● 未確認</span>';
+    const photos=Array.isArray(h.photos)?h.photos:[];
+    const gallery=photos.length?`<div class="ho_gallery">${photos.map(p=>
+      `<figure><img src="${escA(p.url)}" onclick="lightbox('${escA(p.url)}')"><figcaption>${esc(p.caption||'')}</figcaption></figure>`).join('')}</div>`:'';
+    const foot=h.done
+      ? `<div class="ho_readinfo">✔ ${esc(h.read_by||'')||'誰か'} さんが確認済${h.read_at?`（${hoReadLabel(h.read_at)}）`:''}</div>
+         <button class="ho_edit" onclick="unreadHandover('${h.id}')">↩ 未確認に戻す</button>
+         <button class="ho_edit" onclick="openHandoverForm('${h.id}')">✏️ 編集する</button>`
+      : `<button class="ho_read" onclick="markHandoverRead('${h.id}')">✅ 確認済にする</button>
+         <button class="ho_edit" onclick="openHandoverForm('${h.id}')">✏️ 編集する</button>`;
+    return `<div class="${cls}">
+      <div class="ho_top">
+        <div class="ho_who">
+          <span class="frm">${esc(h.from_name||'?')}</span>
+          <span class="arw">→</span>
+          <span class="to">${hoToLabel(h)}</span>
+        </div>
+        <span class="ho_date">${h.happen_on?'📅 '+hoDateLabel(h.happen_on):''}</span>
+      </div>
+      <div style="margin-top:6px">${badge}</div>
+      ${h.body?`<div class="ho_body">${esc(h.body)}</div>`:''}
+      ${gallery}
+      ${foot}
+    </div>`;
+  }).join('');
+}
+/* ---- 全タブ共通の通知バー ---- */
+function handoverGroups(list){
+  const m={};
+  list.forEach(h=>{const t=(h.to_name||'').trim();const k=(!t||hoIsBroadcast(h))?'全員':t;m[k]=(m[k]||0)+1;});
+  return Object.entries(m).map(([k,v])=>k==='全員'?`全員宛て${v}件`:`${k}さん宛て${v}件`);
+}
+function renderNotifyBar(){
+  const bar=document.getElementById('notifyBar');if(!bar)return;
+  const unread=(typeof handovers!=='undefined'?handovers:[]).filter(h=>!h.done);
+  if(!unread.length){bar.className='notifybar';bar.innerHTML='';return;}
+  const op=getOperator();
+  const mine=op?unread.filter(hoForMe):[];
+  if(mine.length){
+    bar.className='notifybar show mine';
+    bar.innerHTML=`🔔 <b>${esc(op)}さんへ</b> 未確認の引き継ぎが <b>${mine.length}件</b> あります。開いて内容を確認し「確認済」を押してください<span class="nb_go">見る ▶</span>`;
+  }else{
+    bar.className='notifybar show';
+    bar.innerHTML=`🔔 未確認の引き継ぎ：${esc(handoverGroups(unread).join(' ／ '))}　気づいた方は本人に口頭でお伝えください<span class="nb_go">見る ▶</span>`;
+  }
+}
+function goHandover(){switchTab('handover');}
+/* ---- 確認済／未確認に戻す ---- */
+async function markHandoverRead(id){
+  if(!db){alert('接続がありません');return;}
+  let who=getOperator();
+  if(!who){who=(prompt('確認した人のお名前を入れてください：')||'').trim();if(!who)return;setOperator(who);}
+  const {error}=await db.from('inv_handovers')
+    .update({done:true,read_by:who,read_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',id);
+  if(error){console.error(error);alert('確認の記録に失敗しました（通信を確認してください）');return;}
+  loadHandovers();
+}
+async function unreadHandover(id){
+  if(!db)return;
+  const {error}=await db.from('inv_handovers')
+    .update({done:false,read_by:'',read_at:null,updated_at:new Date().toISOString()}).eq('id',id);
+  if(error){console.error(error);alert('更新に失敗しました');return;}
+  loadHandovers();
+}
+/* ---- 登録/編集フォーム（写真つき） ---- */
+function openHandoverForm(id){
+  handoverEditId=id||null;
+  document.getElementById('handoverFormTitle').textContent=id?'引き継ぎを編集':'＋ 引き継ぎを登録';
+  document.getElementById('handoverDelBtn').classList.toggle('hide',!id);
+  const h=id?handovers.find(x=>x.id===id):null;
+  hf_from.value=h?h.from_name:(getOperator()||'');
+  hf_to.value=h?h.to_name:'';
+  hf_date.value=h?(h.happen_on||todayStr()):todayStr();
+  hf_body.value=h?h.body:'';
+  draftHandover={photos:(h&&Array.isArray(h.photos)?h.photos:[]).map(p=>({url:p.url,caption:p.caption||'',blob:null,preview:''}))};
+  renderHandoverPhotoUI();
+  showPage('handoverform');
+}
+function renderHandoverPhotoUI(){
+  const cells=draftHandover.photos.map((p,i)=>{
+    const src=p.preview||p.url;
+    return `<div class="pc">
+      <img src="${escA(src)}" onclick="lightbox('${escA(src)}')">
+      <button class="rm" onclick="removeHandoverPhoto(${i})">✕</button>
+      <input placeholder="説明(任意)" value="${escA(p.caption||'')}" oninput="setHandoverCaption(${i},this.value)">
+    </div>`;
+  }).join('');
+  document.getElementById('hf_photos').innerHTML=cells+`<button class="add" onclick="pickHandoverPhoto()">＋</button>`;
+}
+function setHandoverCaption(i,v){if(draftHandover&&draftHandover.photos[i])draftHandover.photos[i].caption=v;}
+function pickHandoverPhoto(){document.getElementById('hf_photo_file').click();}
+function removeHandoverPhoto(i){draftHandover.photos.splice(i,1);renderHandoverPhotoUI();}
+async function onHandoverPick(input){
+  const f=input.files&&input.files[0];input.value='';if(!f)return;
+  try{const b=await compressImage(f);draftHandover.photos.push({url:'',blob:b,preview:URL.createObjectURL(b),caption:''});renderHandoverPhotoUI();}
+  catch(e){alert(e.message);}
+}
+async function saveHandover(){
+  if(!db){alert('接続がありません');return;}
+  const from=hf_from.value.trim(), body=hf_body.value.trim();
+  if(!from){alert('「誰から」を入れてください');return;}
+  if(!body&&!draftHandover.photos.length){alert('引き継ぎ内容か写真を入れてください');return;}
+  showSaving(true);
+  try{
+    const base={from_name:from,to_name:hf_to.value.trim(),happen_on:hf_date.value||null,body};
+    let id=handoverEditId, keepDone=false, keepBy='', keepAt=null;
+    if(id){const cur=handovers.find(x=>x.id===id);if(cur){keepDone=cur.done;keepBy=cur.read_by;keepAt=cur.read_at;}}
+    if(!id){
+      const ins=await db.from('inv_handovers').insert({...base,done:false}).select().single();
+      if(ins.error)throw ins.error;
+      id=ins.data.id;
+    }
+    const photos=[];
+    for(const p of draftHandover.photos){
+      let url=p.url;
+      if(p.blob)url=await uploadPhoto(id,p.blob);
+      if(url)photos.push({url,caption:p.caption||''});
+    }
+    const upd=await db.from('inv_handovers')
+      .update({...base,photos,done:keepDone,read_by:keepBy||'',read_at:keepAt||null,updated_at:new Date().toISOString()}).eq('id',id);
+    if(upd.error)throw upd.error;
+    showSaving(false);showPage('handover');loadHandovers();
+  }catch(e){console.error(e);showSaving(false);alert('保存に失敗しました：'+(e.message||e));}
+}
+async function deleteHandover(){
+  if(!handoverEditId||!db)return;
+  if(!confirmDelete('この引き継ぎ連絡を削除しますか？（写真も一緒に消えます）'))return;
+  showSaving(true);
+  try{
+    const {data:files}=await db.storage.from('recipe-photos').list(handoverEditId);
+    if(files&&files.length)await db.storage.from('recipe-photos').remove(files.map(f=>`${handoverEditId}/${f.name}`));
+    const {error}=await db.from('inv_handovers').delete().eq('id',handoverEditId);
+    if(error)throw error;
+    showSaving(false);showPage('handover');loadHandovers();
+  }catch(e){console.error(e);showSaving(false);alert('削除に失敗しました：'+(e.message||e));}
+}
+
 /* ---- タブ/ページ ---- */
 let currentTab='stock';
 function switchTab(t){currentTab=t;
@@ -1779,6 +2056,8 @@ function showPage(p){
   document.getElementById('tab-portion').classList.toggle('hide',p!=='portion');
   document.getElementById('tab-supplier').classList.toggle('hide',p!=='supplier');
   document.getElementById('tab-guide').classList.toggle('hide',p!=='guide');
+  document.getElementById('tab-handover').classList.toggle('hide',p!=='handover');
+  document.getElementById('handoverFormPage').classList.toggle('hide',p!=='handoverform');
   document.getElementById('tab-calc').classList.toggle('hide',p!=='calc');
   document.getElementById('formPage').classList.toggle('hide',p!=='form');
   document.getElementById('ingFormPage').classList.toggle('hide',p!=='ingform');
@@ -1800,6 +2079,7 @@ function showPage(p){
     if(guideCat==='garbage'){fab.classList.add('hide');}
     else{fab.classList.remove('hide');fab.textContent='＋ 登録';}
   }
+  else if(p==='handover'){fab.classList.remove('hide');fab.textContent='＋ 引き継ぎを登録';}
   else fab.classList.add('hide');
   window.scrollTo(0,0);
 }
@@ -1810,6 +2090,7 @@ function fabAction(){
   else if(currentTab==='portion')openPortionForm();
   else if(currentTab==='supplier')openSupplierForm();
   else if(currentTab==='guide'){if(guideCat!=='garbage')openGuideForm();}
+  else if(currentTab==='handover')openHandoverForm();
 }
 
 /* ---- 税込計算機 ---- */
