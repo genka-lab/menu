@@ -22,6 +22,7 @@ header{background:linear-gradient(135deg,var(--navy),var(--blue));color:#fff;
   padding:16px 16px 14px;position:sticky;top:0;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.15)}
 header h1{margin:0;font-size:18px;font-weight:700}
 header p{margin:2px 0 0;font-size:12px;opacity:.85}
+.hdr-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .tabs{display:flex;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:64px;z-index:15;overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
 .tab{flex:0 0 auto;text-align:center;padding:12px 13px;font-size:13px;font-weight:600;color:var(--sub);border-bottom:3px solid transparent;white-space:nowrap}
@@ -80,9 +81,9 @@ h2.sec{font-size:15px;color:var(--navy);margin:4px 0 12px;display:flex;align-ite
 .gate p{margin:0 0 16px;font-size:12px;color:var(--sub)}
 .gate input{text-align:center;font-size:18px;letter-spacing:2px}
 .gate .err{color:var(--red);font-size:13px;font-weight:700;margin-top:10px;min-height:18px}
-.lockbtn{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);
+.lockbtn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);
   color:#fff;border-radius:10px;font-size:12px;font-weight:700;padding:6px 10px}
-.reloadbtn{position:absolute;top:14px;left:14px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);
+.reloadbtn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);
   color:#fff;border-radius:10px;font-size:12px;font-weight:700;padding:6px 10px}
 .reloadbtn:active{background:rgba(255,255,255,.3)}
 .reloadbtn.spin{opacity:.6}
@@ -301,8 +302,10 @@ textarea:focus{border-color:var(--blue);background:#fff}
 </div>
 
 <header>
-  <button class="reloadbtn" id="reloadBtn" onclick="reloadAll()"><span>🔄</span> 更新</button>
-  <button class="lockbtn" onclick="relock()">🔒 ロック</button>
+  <div class="hdr-top">
+    <button class="reloadbtn" id="reloadBtn" onclick="reloadAll()"><span>🔄</span> 更新</button>
+    <button class="lockbtn" onclick="relock()">🔒 ロック</button>
+  </div>
   <h1>🏮 居酒屋 メニュー・在庫</h1>
   <p>在庫をみんなで共有 ／ 原価・割引・利益も計算</p>
 </header>
