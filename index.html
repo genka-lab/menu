@@ -82,6 +82,12 @@ h2.sec{font-size:15px;color:var(--navy);margin:4px 0 12px;display:flex;align-ite
 .gate .err{color:var(--red);font-size:13px;font-weight:700;margin-top:10px;min-height:18px}
 .lockbtn{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);
   color:#fff;border-radius:10px;font-size:12px;font-weight:700;padding:6px 10px}
+.reloadbtn{position:absolute;top:14px;left:14px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.4);
+  color:#fff;border-radius:10px;font-size:12px;font-weight:700;padding:6px 10px}
+.reloadbtn:active{background:rgba(255,255,255,.3)}
+.reloadbtn.spin{opacity:.6}
+.reloadbtn.spin span{display:inline-block;animation:rspin .8s linear infinite}
+@keyframes rspin{to{transform:rotate(360deg)}}
 .ingcard{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:10px;position:relative}
 .ingcard .ightitle{font-size:12px;font-weight:700;color:var(--blue);margin-bottom:4px}
 .ingdel{position:absolute;top:8px;right:8px;background:#fff;border:1.5px solid var(--red);color:var(--red);
@@ -295,6 +301,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
 </div>
 
 <header>
+  <button class="reloadbtn" id="reloadBtn" onclick="reloadAll()"><span>🔄</span> 更新</button>
   <button class="lockbtn" onclick="relock()">🔒 ロック</button>
   <h1>🏮 居酒屋 メニュー・在庫</h1>
   <p>在庫をみんなで共有 ／ 原価・割引・利益も計算</p>
@@ -451,6 +458,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <button id="mSortKana" onclick="setMenuSort('kana')">あいうえお順</button>
     <button id="mSortManual" onclick="setMenuSort('manual')">自分で並べる</button>
   </div>
+  <div id="menuSummary" style="display:none"></div>
   <button class="btn sub" id="exportBtn" style="margin-top:0;margin-bottom:12px" onclick="exportCSV()">📊 エクセル(CSV)で出力</button>
   <div id="itemList"></div>
   <div id="emptyMsg" class="empty">
@@ -744,6 +752,20 @@ function initDB(){
   loadGuides();
   loadHandovers();
   setupRealtime();
+}
+
+// 全タブのデータを手動で再読み込み（リアルタイムが届かない時用）
+async function reloadAll(){
+  const btn=document.getElementById('reloadBtn');
+  if(btn&&btn.classList.contains('spin'))return; // 連打防止
+  if(btn)btn.classList.add('spin');
+  try{
+    await Promise.all([
+      loadInventory(),loadRecipes(),loadMenus(),
+      loadPortions(),loadSuppliers(),loadGuides(),loadHandovers()
+    ]);
+  }catch(e){console.error(e);}
+  finally{ if(btn)setTimeout(()=>btn.classList.remove('spin'),500); }
 }
 
 async function loadInventory(){
@@ -1332,8 +1354,35 @@ async function moveMenu(i,dir){
       db.from('inv_menus').update({sort_order:it.sort_order}).eq('id',it.id)));
   }
 }
+function renderMenuSummary(){
+  const box=document.getElementById('menuSummary');
+  if(!box)return;
+  if(!items.length){box.style.display='none';box.innerHTML='';return;}
+  // 通常＋各割引ごとに、全メニューの原価合計÷売価合計で平均原価率を算出
+  const levels=[{label:'通常価格',d:0}].concat(DISCOUNTS.map(d=>({label:d+'%引き',d})));
+  let rows='';
+  levels.forEach(lv=>{
+    let totalCost=0,totalPrice=0;
+    items.forEach(it=>{
+      const c=calc(it);
+      totalCost+=c.unitCost;
+      totalPrice+=(lv.d===0)?it.price:(c.disc.find(x=>x.d===lv.d)?.price||0);
+    });
+    const rate=totalPrice>0?totalCost/totalPrice*100:0;
+    const profit=totalPrice-totalCost;
+    rows+=`<tr><td>${lv.label}</td><td class="price">${yen(totalPrice)}</td><td class="${profit<0?'neg':''}">${yen(profit)}</td><td><span class="rate ${rateClass(rate)}">${rate.toFixed(1)}%</span></td></tr>`;
+  });
+  box.style.display='block';
+  box.innerHTML=`
+    <div class="item" style="border:2px solid var(--blue)">
+      <h3 style="color:var(--navy)">📊 全メニュー平均（${items.length}品を合算）</h3>
+      <div class="note" style="margin:-4px 0 8px">各割引率での「原価合計 ÷ 売価合計」の平均原価率です</div>
+      <table><tr><th></th><th>売価合計</th><th>粗利合計</th><th>平均原価率</th></tr>${rows}</table>
+    </div>`;
+}
 function render(){
   updateTabCounts();
+  renderMenuSummary();
   const box=document.getElementById('itemList');
   document.getElementById('emptyMsg').style.display=items.length?'none':'block';
   document.getElementById('exportBtn').style.display=items.length?'block':'none';
