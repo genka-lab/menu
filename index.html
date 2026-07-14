@@ -18,12 +18,21 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;font-family:-apple-system,"Hiragino Kaku Gothic ProN","メイリオ",sans-serif;
   background:var(--bg);color:var(--ink);font-size:16px;line-height:1.5;padding-bottom:90px}
+/* ヘッダー＋タブ＋通知バーをひとかたまりで画面上に追従させる */
+.topbar{position:sticky;top:0;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.15)}
 header{background:linear-gradient(135deg,var(--navy),var(--blue));color:#fff;
-  padding:16px 16px 14px;position:sticky;top:0;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+  padding:16px 16px 14px}
 header h1{margin:0;font-size:18px;font-weight:700}
 header p{margin:2px 0 0;font-size:12px;opacity:.85}
-.hdr-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.tabs{display:flex;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:64px;z-index:15;overflow-x:auto;scrollbar-width:none}
+.hdr-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.hdr-mini{display:none;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* スクロール中は細く縮めて画面を広く使う */
+.topbar.shrink header{padding:7px 16px}
+.topbar.shrink .hdr-top{margin-bottom:0}
+.topbar.shrink header h1,.topbar.shrink header p{display:none}
+.topbar.shrink .hdr-mini{display:block}
+.topbar.shrink .tab{padding:9px 13px}
+.tabs{display:flex;background:var(--card);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
 .tab{flex:0 0 auto;text-align:center;padding:12px 13px;font-size:13px;font-weight:600;color:var(--sub);border-bottom:3px solid transparent;white-space:nowrap}
 .tab.active{color:var(--navy);border-bottom-color:var(--navy)}
@@ -251,7 +260,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
   border:1.5px solid var(--greenline);border-radius:9px;padding:2px 12px;background:#f2faf5}
 .supcard .sp_edit{margin-top:10px;width:100%;padding:9px;font-size:13px;font-weight:700;border-radius:10px;border:1.5px solid var(--line);background:#fff;color:var(--sub)}
 /* ===== 引き継ぎ連絡 通知バー（全タブ共通・未確認があると出続ける） ===== */
-.notifybar{position:sticky;top:110px;z-index:14;display:none;margin:0;padding:11px 14px;
+.notifybar{display:none;margin:0;padding:11px 14px;
   background:#fff4d6;border-bottom:2px solid #f0c040;color:#8a5a00;font-size:13.5px;font-weight:700;
   line-height:1.5;box-shadow:0 3px 8px rgba(0,0,0,.08);cursor:pointer;animation:notifpulse 2s ease-in-out infinite}
 .notifybar.show{display:block}
@@ -301,9 +310,11 @@ textarea:focus{border-color:var(--blue);background:#fff}
   </div>
 </div>
 
+<div class="topbar" id="topbar">
 <header>
   <div class="hdr-top">
     <button class="reloadbtn" id="reloadBtn" onclick="reloadAll()"><span>🔄</span> 更新</button>
+    <span class="hdr-mini">🏮 メニュー・在庫</span>
     <button class="lockbtn" onclick="relock()">🔒 ロック</button>
   </div>
   <h1>🏮 居酒屋 メニュー・在庫</h1>
@@ -323,6 +334,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
 
 <!-- ========== 未確認の引き継ぎ通知バー（全タブ共通で出続ける） ========== -->
 <div id="notifyBar" class="notifybar" onclick="goHandover()"></div>
+</div><!-- /topbar -->
 
 <!-- ========== 在庫管理 ========== -->
 <div id="tab-stock" class="wrap">
@@ -2184,6 +2196,17 @@ function exportCSV(){
   a.href=URL.createObjectURL(blob);a.download=fn;document.body.appendChild(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
 }
+
+/* ---- スクロールでヘッダーを細くする（しきい値に幅を持たせてチラつき防止） ---- */
+(function(){
+  const tb=document.getElementById('topbar');if(!tb)return;
+  let small=false;
+  window.addEventListener('scroll',function(){
+    const y=window.scrollY||document.documentElement.scrollTop;
+    if(!small&&y>90){small=true;tb.classList.add('shrink');}
+    else if(small&&y<30){small=false;tb.classList.remove('shrink');}
+  },{passive:true});
+})();
 
 /* ---- 起動 ---- */
 render();calcTax();calcTax2();
