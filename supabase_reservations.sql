@@ -10,7 +10,7 @@
 -- How to run: Supabase -> SQL Editor -> paste -> Run (once)
 --
 -- !! CHANGE THE OWNER PASSWORD !!
---    Edit the line  select 'yoyaku2026'::text  in res_owner_pass() below.
+--    Edit the line  select 'yoyaku2026'::text  in private.res_owner_pass() below.
 --    To change it later, just re-run that one function with a new value.
 -- ============================================================
 
@@ -50,13 +50,20 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 
 -- ------------------------------------------------------------
--- Owner password (kept inside the database, never sent to phones)
+-- Owner password.
+-- It lives in the "private" schema on purpose: PostgREST only exposes
+-- the "public" schema, so the app key has no way to call this function.
+-- (Do NOT put it in public: Supabase grants execute on public functions
+--  to the anon role by default, which would expose the password.)
 -- ------------------------------------------------------------
-create or replace function res_owner_pass() returns text
+create schema if not exists private;
+revoke all on schema private from public, anon, authenticated;
+
+create or replace function private.res_owner_pass() returns text
 language sql immutable as $$
   select 'yoyaku2026'::text
 $$;
-revoke execute on function res_owner_pass() from public;
+revoke all on function private.res_owner_pass() from public, anon, authenticated;
 
 -- ------------------------------------------------------------
 -- Owner: read every reservation (any date, any time of day)
@@ -65,7 +72,7 @@ create or replace function res_list(p_pass text)
 returns setof inv_reservations
 language plpgsql security definer set search_path = public as $$
 begin
-  if p_pass is distinct from res_owner_pass() then
+  if p_pass is distinct from private.res_owner_pass() then
     perform pg_sleep(1);           -- slow down password guessing
     raise exception 'password_ng';
   end if;
@@ -92,7 +99,7 @@ create or replace function res_save(
 language plpgsql security definer set search_path = public as $$
 declare v_id uuid;
 begin
-  if p_pass is distinct from res_owner_pass() then
+  if p_pass is distinct from private.res_owner_pass() then
     perform pg_sleep(1);
     raise exception 'password_ng';
   end if;
@@ -122,7 +129,7 @@ create or replace function res_delete(p_pass text, p_id uuid)
 returns void
 language plpgsql security definer set search_path = public as $$
 begin
-  if p_pass is distinct from res_owner_pass() then
+  if p_pass is distinct from private.res_owner_pass() then
     perform pg_sleep(1);
     raise exception 'password_ng';
   end if;
