@@ -681,15 +681,15 @@ textarea:focus{border-color:var(--blue);background:#fff}
   <div class="card">
     <h2 class="sec" id="sftFormTitle">＋ 出勤を追加</h2>
     <label>📅 日付</label>
-    <input id="sf_date" type="date">
+    <input id="shf_date" type="date">
     <label>👤 名前</label>
-    <input id="sf_name" placeholder="例：たなか">
+    <input id="shf_name" placeholder="例：たなか">
     <div class="row2">
-      <div><label>🕐 出勤（何時から）</label><input id="sf_start" type="time"></div>
-      <div><label>退勤（任意）</label><input id="sf_end" type="time"></div>
+      <div><label>🕐 出勤（何時から）</label><input id="shf_start" type="time"></div>
+      <div><label>退勤（任意）</label><input id="shf_end" type="time"></div>
     </div>
     <label>メモ（任意・ホール／キッチン等）</label>
-    <input id="sf_note" placeholder="例：ホール">
+    <input id="shf_note" placeholder="例：ホール">
     <button class="btn" onclick="saveShift()">保存する</button>
     <button class="btn sub" onclick="showPage('shift')">キャンセル</button>
     <button class="btn danger hide" id="sftDelBtn" onclick="deleteShift()">この出勤を削除</button>
@@ -2603,23 +2603,23 @@ function openShiftForm(id){
   document.getElementById('sftFormTitle').textContent=id?'出勤を編集':'＋ 出勤を追加';
   document.getElementById('sftDelBtn').classList.toggle('hide',!id);
   const s=id?shifts.find(x=>x.id===id):null;
-  sf_date.value=s?s.work_on:(document.getElementById('sft_date').value||todayStr());
-  sf_name.value=s?s.staff_name:'';
-  sf_start.value=s?(s.start_at||'').slice(0,5):'';
-  sf_end.value=s?(s.end_at||'').slice(0,5):'';
-  sf_note.value=s?s.note:'';
+  shf_date.value=s?s.work_on:(document.getElementById('sft_date').value||todayStr());
+  shf_name.value=s?s.staff_name:'';
+  shf_start.value=s?(s.start_at||'').slice(0,5):'';
+  shf_end.value=s?(s.end_at||'').slice(0,5):'';
+  shf_note.value=s?s.note:'';
   showPage('shiftform');
 }
 async function saveShift(){
   if(!db){alert('接続がありません');return;}
   if(!sftIsOwner()){alert('シフトの登録はオーナー（栗原）のみです。');return;}
-  if(!sf_date.value){alert('日付を入れてください');return;}
-  if(!sf_name.value.trim()){alert('名前を入れてください');return;}
+  if(!shf_date.value){alert('日付を入れてください');return;}
+  if(!shf_name.value.trim()){alert('名前を入れてください');return;}
   showSaving(true);
   const r=await db.rpc('sft_save',{
-    p_pass:sftOwnerPass, p_id:sftEditId, p_on:sf_date.value,
-    p_name:sf_name.value.trim(), p_start:sf_start.value||'', p_end:sf_end.value||'',
-    p_note:sf_note.value.trim()
+    p_pass:sftOwnerPass, p_id:sftEditId, p_on:shf_date.value,
+    p_name:shf_name.value.trim(), p_start:shf_start.value||'', p_end:shf_end.value||'',
+    p_note:shf_note.value.trim()
   });
   showSaving(false);
   if(r.error){
@@ -2628,7 +2628,7 @@ async function saveShift(){
                               :'保存に失敗しました：'+(r.error.message||r.error));
     return;
   }
-  document.getElementById('sft_date').value=sf_date.value;
+  document.getElementById('sft_date').value=shf_date.value;
   showPage('shift');
   loadShifts();
 }
