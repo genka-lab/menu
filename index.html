@@ -19,19 +19,15 @@
 body{margin:0;font-family:-apple-system,"Hiragino Kaku Gothic ProN","メイリオ",sans-serif;
   background:var(--bg);color:var(--ink);font-size:16px;line-height:1.5;padding-bottom:90px}
 /* ヘッダー＋タブ＋通知バーをひとかたまりで画面上に追従させる */
-.topbar{position:sticky;top:0;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+/* iOS等でstickyの再描画残像(ブルブル)が出ないよう高さは固定・GPU層に載せる */
+.topbar{position:sticky;top:0;z-index:20;box-shadow:0 2px 8px rgba(0,0,0,.15);
+  will-change:transform;transform:translateZ(0);backface-visibility:hidden}
 header{background:linear-gradient(135deg,var(--navy),var(--blue));color:#fff;
   padding:16px 16px 14px}
 header h1{margin:0;font-size:18px;font-weight:700}
 header p{margin:2px 0 0;font-size:12px;opacity:.85}
 .hdr-top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
 .hdr-mini{display:none;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* スクロール中は細く縮めて画面を広く使う */
-.topbar.shrink header{padding:7px 16px}
-.topbar.shrink .hdr-top{margin-bottom:0}
-.topbar.shrink header h1,.topbar.shrink header p{display:none}
-.topbar.shrink .hdr-mini{display:block}
-.topbar.shrink .tab{padding:9px 13px}
 .tabs{display:flex;background:var(--card);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
 .tab{flex:0 0 auto;text-align:center;padding:12px 13px;font-size:13px;font-weight:600;color:var(--sub);border-bottom:3px solid transparent;white-space:nowrap}
@@ -2809,16 +2805,8 @@ function exportCSV(){
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
 }
 
-/* ---- スクロールでヘッダーを細くする（しきい値に幅を持たせてチラつき防止） ---- */
-(function(){
-  const tb=document.getElementById('topbar');if(!tb)return;
-  let small=false;
-  window.addEventListener('scroll',function(){
-    const y=window.scrollY||document.documentElement.scrollTop;
-    if(!small&&y>90){small=true;tb.classList.add('shrink');}
-    else if(small&&y<30){small=false;tb.classList.remove('shrink');}
-  },{passive:true});
-})();
+/* ヘッダーの縮小(スクロール追従で高さ変化)はstickyの再描画残像=ブルブル振動の
+   原因になるため廃止。ヘッダーは高さ固定でなめらかに追従させる。 */
 
 /* ---- 起動 ---- */
 render();calcTax();calcTax2();
