@@ -344,6 +344,12 @@ textarea:focus{border-color:var(--blue);background:#fff}
 .sft_note{font-size:12px;font-weight:700;color:var(--sub);margin-top:3px}
 .sft_edit{flex:0 0 auto;padding:8px 12px;font-size:12px;font-weight:700;border-radius:10px;
   border:1.5px solid var(--line);background:#fff;color:var(--sub)}
+.sft_date{flex:0 0 auto;font-size:13px;font-weight:800;color:var(--navy);background:#e7eef7;
+  border-radius:8px;padding:5px 9px;white-space:nowrap}
+.sft_staffbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;font-weight:800;color:var(--navy)}
+.sft_staffbar span{flex:0 0 auto}
+.sft_staffbar select{flex:1 1 auto;padding:9px 10px;font-size:15px;border-radius:10px;border:1.5px solid var(--line);background:#fff}
+.sft_staffbar.hide{display:none}
 </style>
 </head>
 <body>
@@ -660,6 +666,12 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <button onclick="sftLogout()">解除</button>
   </div>
   <button id="sftLoginBtn" class="res_loginbtn" onclick="sftLogin()">🔑 オーナー（栗原）の方はこちら（パスワード）</button>
+  <div id="sftStaffBar" class="sft_staffbar hide">
+    <span>👤 スタッフで見る</span>
+    <select id="sftStaffFilter" onchange="renderShifts()">
+      <option value="">（日付で見る）</option>
+    </select>
+  </div>
   <div id="sftDateBar" class="res_datebar hide">
     <button onclick="sftShiftDate(-1)">◀</button>
     <input id="sft_date" type="date" onchange="renderShifts()">
@@ -2353,11 +2365,12 @@ function renderReservations(){
   // 16時前はサーバーが本日分を渡さないので list は空になる（＝ロック画面）
   const locked=!owner&&!resIsOpenNow()&&!list.length;
   const todayBar=document.getElementById('resTodayBar');
-  todayBar.classList.toggle('hide',owner||locked);
-  if(!owner&&!locked){
+  todayBar.classList.toggle('hide',locked);
+  if(!locked){
     const ppl=list.reduce((s,r)=>s+(+r.people||0),0);
-    todayBar.innerHTML=`📅 本日 ${resDateLabel(day)} の予約 ${list.length}件`+
-      (ppl?`<span class="sub">合計 ${ppl}名</span>`:'');
+    const head=owner?`📅 ${resDateLabel(day)} の予約 ${list.length}件`
+                    :`📅 本日 ${resDateLabel(day)} の予約 ${list.length}件`;
+    todayBar.innerHTML=head+(ppl?`<span class="sub">合計 ${ppl}名</span>`:'');
   }
   document.getElementById('resLocked').style.display=locked?'block':'none';
   if(locked)document.getElementById('resCountdown').textContent=resWaitLabel();
@@ -2528,22 +2541,57 @@ function sftOfDay(ymd){
     return ta<tb?-1:ta>tb?1:0;
   });
 }
+/* スタッフ名の一覧（重複なし・あいうえお順） */
+function sftStaffNames(){
+  return [...new Set(shifts.map(s=>(s.staff_name||'').trim()).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,'ja'));
+}
 function renderShifts(){
   updateTabCounts();
   const owner=sftIsOwner();
   document.getElementById('sftOwnerBar').classList.toggle('hide',!owner);
   document.getElementById('sftLoginBtn').classList.toggle('hide',owner);
-  document.getElementById('sftDateBar').classList.toggle('hide',!owner);
+  // スタッフ絞り込み（オーナーのみ）。選択を保ったまま選択肢を作り直す
+  const staffBar=document.getElementById('sftStaffBar');
+  staffBar.classList.toggle('hide',!owner);
+  const sel=document.getElementById('sftStaffFilter');
+  if(owner){
+    const cur=sel.value;
+    sel.innerHTML='<option value="">（日付で見る）</option>'+
+      sftStaffNames().map(n=>`<option${n===cur?' selected':''}>${esc(n)}</option>`).join('');
+  }
+  const filterName=owner?sel.value:'';
+  const personMode=owner&&!!filterName;
+  // 人で絞り込み中は日付バーを隠す
+  document.getElementById('sftDateBar').classList.toggle('hide',!owner||personMode);
   const dateEl=document.getElementById('sft_date');
   if(owner&&!dateEl.value)dateEl.value=todayStr();
   const day=owner?(dateEl.value||todayStr()):todayStr();
-  const list=sftOfDay(day);
+
+  let list;
+  if(personMode){
+    // その人の全出勤日を日付順（古い順）に
+    list=shifts.filter(s=>(s.staff_name||'').trim()===filterName).sort((a,b)=>{
+      const da=a.work_on||'', db2=b.work_on||'';
+      if(da!==db2)return da<db2?-1:1;
+      const ta=a.start_at||'99:99', tb=b.start_at||'99:99';
+      return ta<tb?-1:ta>tb?1:0;
+    });
+  }else{
+    list=sftOfDay(day);
+  }
   // 16時前はサーバーが本日分を渡さないので list は空になる（＝ロック画面）
   const locked=!owner&&!sftIsOpenNow()&&!list.length;
   const todayBar=document.getElementById('sftTodayBar');
-  todayBar.classList.toggle('hide',owner||locked);
-  if(!owner&&!locked){
-    todayBar.innerHTML=`🗓 本日 ${resDateLabel(day)} の出勤 ${list.length}名`;
+  todayBar.classList.toggle('hide',locked);
+  if(!locked){
+    if(personMode){
+      todayBar.innerHTML=`👤 ${esc(filterName)} さんの出勤 ${list.length}件`;
+    }else if(owner){
+      todayBar.innerHTML=`🗓 ${resDateLabel(day)} の出勤 ${list.length}名`;
+    }else{
+      todayBar.innerHTML=`🗓 本日 ${resDateLabel(day)} の出勤 ${list.length}名`;
+    }
   }
   document.getElementById('sftLocked').style.display=locked?'block':'none';
   if(locked)document.getElementById('sftCountdown').textContent=sftWaitLabel();
@@ -2551,7 +2599,10 @@ function renderShifts(){
   document.getElementById('sftList').innerHTML=locked?'':list.map(s=>{
     const st=(s.start_at||'').slice(0,5), en=(s.end_at||'').slice(0,5);
     const time=st?`${esc(st)}${en?`<span class="to">〜${esc(en)}</span>`:'〜'}`:'時間未定';
+    // 人で絞り込み中は各行に日付＋曜日を出す
+    const datePrefix=personMode?`<span class="sft_date">${resDateLabel(s.work_on)}</span>`:'';
     return `<div class="sftcard">
+      ${datePrefix}
       <span class="sft_time">${time}</span>
       <span class="sft_who">
         <span class="sft_name">${esc(s.staff_name||'（名前なし）')}</span>
