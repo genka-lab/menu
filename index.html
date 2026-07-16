@@ -293,6 +293,45 @@ textarea:focus{border-color:var(--blue);background:#fff}
 .ho_readinfo{margin-top:10px;font-size:13px;color:var(--green);font-weight:700;background:#eef7f0;
   border:1px solid var(--greenline);border-radius:10px;padding:8px 10px}
 .ho_edit{margin-top:8px;width:100%;padding:9px;font-size:13px;font-weight:700;border-radius:10px;border:1.5px solid var(--line);background:#fff;color:var(--sub)}
+
+/* ---- 予約 ---- */
+.res_lockbox{background:#f3f6fa;border:1.5px dashed var(--line);border-radius:14px;padding:26px 16px;text-align:center}
+.res_lockbox .ic{font-size:38px}
+.res_lockbox h3{margin:8px 0 4px;font-size:17px;color:var(--navy)}
+.res_lockbox p{margin:0;font-size:13px;color:var(--sub);line-height:1.7}
+.res_count{display:inline-block;margin-top:12px;background:var(--navy);color:#fff;font-size:20px;font-weight:800;
+  border-radius:999px;padding:6px 18px;letter-spacing:.5px}
+.res_datebar{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.res_datebar button{flex:0 0 auto;padding:9px 12px;font-size:14px;font-weight:800;border-radius:10px;
+  border:1.5px solid var(--line);background:#fff;color:var(--navy)}
+.res_datebar input{flex:1 1 auto;padding:9px 10px;font-size:15px;margin:0}
+.res_today{font-size:15px;font-weight:800;color:var(--navy);background:#e7eef7;border-radius:10px;
+  padding:9px 12px;text-align:center;margin-bottom:12px}
+.res_today .sub{display:block;font-size:12px;font-weight:700;color:var(--sub);margin-top:2px}
+.rescard{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--blue);
+  border-radius:14px;padding:12px 14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.rescard.soon{border-left-color:var(--orange);background:#fffdf5}
+.res_top{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.res_time{font-size:23px;font-weight:800;color:var(--navy);letter-spacing:.5px}
+.res_ppl{font-size:15px;font-weight:800;color:#fff;background:var(--blue);border-radius:999px;padding:2px 11px}
+.res_name{font-size:16px;font-weight:700;color:var(--ink)}
+.res_chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.res_chip{font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;background:#eef1f5;color:var(--sub)}
+.res_chip.course{background:#e2efda;color:var(--green)}
+.res_note{font-size:14px;color:var(--ink);white-space:pre-wrap;line-height:1.7;margin-top:9px;
+  background:#fff8e8;border:1px solid #f3d3a8;border-radius:10px;padding:8px 10px}
+.res_tel{display:inline-block;margin-top:9px;font-size:14px;font-weight:800;color:var(--blue);
+  border:1.5px solid var(--blue);border-radius:10px;padding:7px 14px;text-decoration:none}
+.res_edit{margin-top:9px;width:100%;padding:9px;font-size:13px;font-weight:700;border-radius:10px;
+  border:1.5px solid var(--line);background:#fff;color:var(--sub)}
+.res_ownerbar{display:flex;align-items:center;gap:8px;background:#fff7f6;border:1px solid #f3b4ab;
+  border-radius:12px;padding:8px 12px;margin-bottom:12px;font-size:13px;font-weight:700;color:var(--red)}
+.res_ownerbar button{margin-left:auto;flex:0 0 auto;padding:7px 12px;font-size:12px;font-weight:800;
+  border-radius:999px;border:1.5px solid var(--red);background:#fff;color:var(--red)}
+.res_loginbtn{width:100%;padding:12px;font-size:14px;font-weight:800;border-radius:12px;
+  border:1.5px solid var(--line);background:#fff;color:var(--sub);margin-bottom:12px}
+/* flex指定が .hide に勝ってしまうので打ち消す */
+.res_ownerbar.hide,.res_datebar.hide{display:none}
 </style>
 </head>
 <body>
@@ -329,6 +368,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
   <div class="tab" data-tab="supplier" onclick="switchTab('supplier')">🏢取引先<span class="cnt" id="cnt-supplier"></span></div>
   <div class="tab" data-tab="guide" onclick="switchTab('guide')">📋業務<span class="cnt" id="cnt-guide"></span></div>
   <div class="tab" data-tab="handover" onclick="switchTab('handover')">📨引き継ぎ<span class="cnt" id="cnt-handover"></span></div>
+  <div class="tab" data-tab="reserve" onclick="switchTab('reserve')">📅予約<span class="cnt" id="cnt-reserve"></span></div>
   <div class="tab" data-tab="calc" onclick="switchTab('calc')">🧮税込</div>
 </div>
 
@@ -541,6 +581,61 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <button class="btn" onclick="saveHandover()">保存する</button>
     <button class="btn sub" onclick="showPage('handover')">キャンセル</button>
     <button class="btn danger hide" id="handoverDelBtn" onclick="deleteHandover()">この引き継ぎを削除</button>
+  </div>
+</div>
+
+<!-- ========== 予約 一覧 ========== -->
+<div id="tab-reserve" class="wrap hide">
+  <div id="resConnBar" class="conn off">接続中…</div>
+  <div id="resOwnerBar" class="res_ownerbar hide">
+    🔑 オーナーモード（予約の登録・全日程の閲覧ができます）
+    <button onclick="resLogout()">解除</button>
+  </div>
+  <button id="resLoginBtn" class="res_loginbtn" onclick="resLogin()">🔑 オーナーの方はこちら（パスワード）</button>
+  <div id="resDateBar" class="res_datebar hide">
+    <button onclick="resShiftDate(-1)">◀</button>
+    <input id="res_date" type="date" onchange="renderReservations()">
+    <button onclick="resShiftDate(1)">▶</button>
+    <button onclick="resGoToday()">今日</button>
+  </div>
+  <div id="resTodayBar" class="res_today hide"></div>
+  <div id="resList"></div>
+  <div id="resLocked" class="res_lockbox" style="display:none">
+    <div class="ic">🔒</div>
+    <h3>本日の予約は 16:00 に公開されます</h3>
+    <p id="resCountdown"></p>
+  </div>
+  <div id="resEmpty" class="empty" style="display:none">この日の予約は入っていません。</div>
+</div>
+
+<!-- ========== 予約 登録/編集フォーム（オーナーのみ） ========== -->
+<div id="resFormPage" class="wrap hide">
+  <div class="card">
+    <h2 class="sec" id="resFormTitle">＋ 予約を追加</h2>
+    <div class="row2">
+      <div><label>📅 日付</label><input id="yf_date" type="date"></div>
+      <div><label>🕐 来店時間</label><input id="yf_time" type="time"></div>
+    </div>
+    <div class="row2">
+      <div><label>お名前</label><input id="yf_name" placeholder="例：山田様"></div>
+      <div><label>人数</label><input id="yf_people" type="number" inputmode="numeric" min="0" placeholder="4"></div>
+    </div>
+    <div class="row2">
+      <div><label>席</label>
+        <select id="yf_seat">
+          <option value="">（未定）</option>
+          <option>テーブル</option><option>カウンター</option><option>座敷</option><option>個室</option>
+        </select>
+      </div>
+      <div><label>コース・飲み放題</label><input id="yf_course" placeholder="例：4000円コース＋飲み放題"></div>
+    </div>
+    <label>📞 連絡先（電話）</label>
+    <input id="yf_phone" type="tel" inputmode="tel" placeholder="例：090-1234-5678">
+    <label>備考メモ（アレルギー・記念日・ご要望など）</label>
+    <textarea id="yf_note" placeholder="例：&#10;・海老アレルギーの方が1名&#10;・誕生日のためデザートプレート"></textarea>
+    <button class="btn" onclick="saveReservation()">保存する</button>
+    <button class="btn sub" onclick="showPage('reserve')">キャンセル</button>
+    <button class="btn danger hide" id="resDelBtn" onclick="deleteReservation()">この予約を削除</button>
   </div>
 </div>
 
@@ -766,6 +861,8 @@ function initDB(){
   loadSuppliers();
   loadGuides();
   loadHandovers();
+  loadReservations();
+  resWasOpen=resIsOpenNow(); // 起動直後に「16時になった」と誤判定しないように
   setupRealtime();
 }
 
@@ -777,7 +874,7 @@ async function reloadAll(){
   try{
     await Promise.all([
       loadInventory(),loadRecipes(),loadMenus(),
-      loadPortions(),loadSuppliers(),loadGuides(),loadHandovers()
+      loadPortions(),loadSuppliers(),loadGuides(),loadHandovers(),loadReservations()
     ]);
   }catch(e){console.error(e);}
   finally{ if(btn)setTimeout(()=>btn.classList.remove('spin'),500); }
@@ -827,6 +924,7 @@ function setupRealtime(){
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_guides'},loadGuides)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_garbage'},loadGuides)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_handovers'},loadHandovers)
+    .on('postgres_changes',{event:'*',schema:'public',table:'inv_reservations'},loadReservations)
     .subscribe();
 }
 
@@ -890,6 +988,8 @@ function updateTabCounts(){
   setTabCount('cnt-supplier',(typeof suppliers!=='undefined'?suppliers:[]).length);
   setTabCount('cnt-guide',(typeof guides!=='undefined'?guides:[]).length);
   setTabCount('cnt-handover',(typeof handovers!=='undefined'?handovers.filter(h=>!h.done).length:0));
+  // 予約は「今日の分」の件数（16時前・非オーナーは0件＝バッジなし）
+  setTabCount('cnt-reserve',(typeof reservations!=='undefined'?resOfDay(todayStr()).length:0));
 }
 function renderInventory(){
   updateTabCounts();
@@ -2109,6 +2209,209 @@ async function deleteHandover(){
   }catch(e){console.error(e);showSaving(false);alert('削除に失敗しました：'+(e.message||e));}
 }
 
+/* ============================================================
+   予約（本日分は16時に公開／登録はオーナーのパスワードのみ）
+   16時前の予約データはSupabase側(RLS)でそもそも配信されません。
+   ============================================================ */
+const RES_OPEN_HOUR=16;
+let reservations=[], resEditId=null, resWasOpen=false;
+let resOwnerPass=localStorage.getItem('izakaya_res_owner')||'';
+function setResConn(cls,text){const b=document.getElementById('resConnBar');if(b){b.className='conn '+cls;b.textContent=text;}}
+function resIsOwner(){return !!resOwnerPass;}
+function resIsOpenNow(){return new Date().getHours()>=RES_OPEN_HOUR;}
+function resIsPassErr(e){return String((e&&e.message)||'').includes('password_ng');}
+/* 16時までの残り時間 */
+function resWaitLabel(){
+  const now=new Date();
+  const open=new Date();open.setHours(RES_OPEN_HOUR,0,0,0);
+  const ms=open-now;
+  if(ms<=0)return 'まもなく公開されます。「🔄更新」を押してください。';
+  const m=Math.ceil(ms/60000), h=Math.floor(m/60), mm=m%60;
+  return `公開まで あと ${h?h+'時間':''}${mm}分（${RES_OPEN_HOUR}:00 になると自動で表示されます）`;
+}
+async function loadReservations(){
+  if(!db)return;
+  if(resIsOwner()){
+    const r=await db.rpc('res_list',{p_pass:resOwnerPass});
+    if(!r.error){
+      reservations=r.data||[];
+      setResConn('on','🟢 オーナーモード（すべての日程の予約が見えます）');
+      renderReservations();
+      return;
+    }
+    console.error(r.error);
+    if(resIsPassErr(r.error)){
+      // オーナーパスワードが変更された場合は自動でオーナーモードを解除
+      resOwnerPass='';localStorage.removeItem('izakaya_res_owner');
+    }else{
+      setResConn('err','予約表が未作成です（supabase_reservations.sql を実行してください）');
+      return;
+    }
+  }
+  const r=await db.from('inv_reservations').select('*');
+  if(r.error){
+    console.error(r.error);
+    setResConn('err','予約表が未作成です（supabase_reservations.sql を実行してください）');
+    return;
+  }
+  reservations=r.data||[];
+  setResConn('on',`🟢 オンライン共有中（本日の予約は${RES_OPEN_HOUR}時に公開）`);
+  renderReservations();
+}
+/* その日の予約を時間順に */
+function resOfDay(ymd){
+  return reservations.filter(r=>r.reserve_on===ymd).sort((a,b)=>{
+    const ta=a.start_at||'99:99', tb=b.start_at||'99:99';
+    return ta<tb?-1:ta>tb?1:0;
+  });
+}
+function resDateLabel(ymd){
+  const w=['日','月','火','水','木','金','土'];
+  const d=new Date(ymd+'T00:00:00');if(isNaN(d))return esc(ymd);
+  return `${d.getMonth()+1}/${d.getDate()}(${w[d.getDay()]})`;
+}
+/* まもなく来店（1時間以内）か */
+function resIsSoon(r,ymd){
+  if(ymd!==todayStr()||!r.start_at)return false;
+  const t=new Date(ymd+'T'+r.start_at.slice(0,5)+':00');
+  if(isNaN(t))return false;
+  const diff=t-new Date();
+  return diff>-1800000&&diff<3600000;
+}
+function renderReservations(){
+  updateTabCounts();
+  const owner=resIsOwner();
+  document.getElementById('resOwnerBar').classList.toggle('hide',!owner);
+  document.getElementById('resLoginBtn').classList.toggle('hide',owner);
+  document.getElementById('resDateBar').classList.toggle('hide',!owner);
+  const dateEl=document.getElementById('res_date');
+  if(owner&&!dateEl.value)dateEl.value=todayStr();
+  const day=owner?(dateEl.value||todayStr()):todayStr();
+  const list=resOfDay(day);
+  // 16時前はサーバーが本日分を渡さないので list は空になる（＝ロック画面）
+  const locked=!owner&&!resIsOpenNow()&&!list.length;
+  const todayBar=document.getElementById('resTodayBar');
+  todayBar.classList.toggle('hide',owner||locked);
+  if(!owner&&!locked){
+    const ppl=list.reduce((s,r)=>s+(+r.people||0),0);
+    todayBar.innerHTML=`📅 本日 ${resDateLabel(day)} の予約 ${list.length}件`+
+      (ppl?`<span class="sub">合計 ${ppl}名</span>`:'');
+  }
+  document.getElementById('resLocked').style.display=locked?'block':'none';
+  if(locked)document.getElementById('resCountdown').textContent=resWaitLabel();
+  document.getElementById('resEmpty').style.display=(!locked&&!list.length)?'block':'none';
+  document.getElementById('resList').innerHTML=locked?'':list.map(r=>{
+    const chips=[];
+    if(r.seat)chips.push(`<span class="res_chip">${esc(r.seat)}</span>`);
+    if(r.course)chips.push(`<span class="res_chip course">${esc(r.course)}</span>`);
+    return `<div class="rescard${resIsSoon(r,day)?' soon':''}">
+      <div class="res_top">
+        <span class="res_time">${esc((r.start_at||'').slice(0,5)||'時間未定')}</span>
+        ${r.people?`<span class="res_ppl">${+r.people}名</span>`:''}
+        <span class="res_name">${esc(r.guest_name||'（お名前なし）')}</span>
+      </div>
+      ${chips.length?`<div class="res_chips">${chips.join('')}</div>`:''}
+      ${r.note?`<div class="res_note">${esc(r.note)}</div>`:''}
+      ${r.phone?`<a class="res_tel" href="tel:${escA(telHref(r.phone))}">📞 ${esc(r.phone)}</a>`:''}
+      ${owner?`<button class="res_edit" onclick="openResForm('${r.id}')">✏️ 編集する</button>`:''}
+    </div>`;
+  }).join('');
+}
+function resShiftDate(d){
+  const el=document.getElementById('res_date');
+  const base=new Date((el.value||todayStr())+'T00:00:00');
+  base.setDate(base.getDate()+d);
+  const p=n=>String(n).padStart(2,'0');
+  el.value=`${base.getFullYear()}-${p(base.getMonth()+1)}-${p(base.getDate())}`;
+  renderReservations();
+}
+function resGoToday(){document.getElementById('res_date').value=todayStr();renderReservations();}
+/* ---- オーナー認証（パスワードはSupabase側で照合） ---- */
+async function resLogin(){
+  if(!db){alert('接続がありません');return;}
+  const p=(prompt('オーナーパスワードを入力してください：')||'').trim();
+  if(!p)return;
+  showSaving(true);
+  const r=await db.rpc('res_list',{p_pass:p});
+  showSaving(false);
+  if(r.error){
+    if(resIsPassErr(r.error)){alert('パスワードが違います。');return;}
+    console.error(r.error);
+    alert('確認に失敗しました：'+(r.error.message||r.error));
+    return;
+  }
+  resOwnerPass=p;localStorage.setItem('izakaya_res_owner',p);
+  reservations=r.data||[];
+  document.getElementById('res_date').value=todayStr();
+  setResConn('on','🟢 オーナーモード（すべての日程の予約が見えます）');
+  showPage('reserve'); // ＋予約を追加ボタンの出し分けも合わせて更新
+}
+function resLogout(){
+  resOwnerPass='';localStorage.removeItem('izakaya_res_owner');
+  reservations=[];
+  showPage('reserve');
+  loadReservations();
+}
+/* ---- 登録/編集フォーム ---- */
+function openResForm(id){
+  if(!resIsOwner()){alert('予約の登録はオーナーのみです。');return;}
+  resEditId=id||null;
+  document.getElementById('resFormTitle').textContent=id?'予約を編集':'＋ 予約を追加';
+  document.getElementById('resDelBtn').classList.toggle('hide',!id);
+  const r=id?reservations.find(x=>x.id===id):null;
+  yf_date.value=r?r.reserve_on:(document.getElementById('res_date').value||todayStr());
+  yf_time.value=r?(r.start_at||'').slice(0,5):'';
+  yf_name.value=r?r.guest_name:'';
+  yf_people.value=r&&r.people?r.people:'';
+  yf_seat.value=r?(r.seat||''):'';
+  yf_course.value=r?r.course:'';
+  yf_phone.value=r?r.phone:'';
+  yf_note.value=r?r.note:'';
+  showPage('resform');
+}
+async function saveReservation(){
+  if(!db){alert('接続がありません');return;}
+  if(!resIsOwner()){alert('予約の登録はオーナーのみです。');return;}
+  if(!yf_date.value){alert('日付を入れてください');return;}
+  if(!yf_name.value.trim()&&!yf_time.value){alert('お名前か来店時間を入れてください');return;}
+  showSaving(true);
+  const r=await db.rpc('res_save',{
+    p_pass:resOwnerPass, p_id:resEditId, p_on:yf_date.value, p_start:yf_time.value||'',
+    p_name:yf_name.value.trim(), p_people:+yf_people.value||0, p_seat:yf_seat.value,
+    p_course:yf_course.value.trim(), p_phone:yf_phone.value.trim(), p_note:yf_note.value.trim()
+  });
+  showSaving(false);
+  if(r.error){
+    console.error(r.error);
+    alert(resIsPassErr(r.error)?'オーナーパスワードが変わっています。もう一度ログインしてください。'
+                              :'保存に失敗しました：'+(r.error.message||r.error));
+    return;
+  }
+  // 日付を変えて保存した時に、その日が見えるように合わせる
+  document.getElementById('res_date').value=yf_date.value;
+  showPage('reserve');
+  loadReservations();
+}
+async function deleteReservation(){
+  if(!resEditId||!db||!resIsOwner())return;
+  if(!confirmDelete('この予約を削除しますか？'))return;
+  showSaving(true);
+  const r=await db.rpc('res_delete',{p_pass:resOwnerPass,p_id:resEditId});
+  showSaving(false);
+  if(r.error){console.error(r.error);alert('削除に失敗しました：'+(r.error.message||r.error));return;}
+  showPage('reserve');
+  loadReservations();
+}
+/* ---- 16時になったら自動で公開（カウントダウンも更新） ---- */
+function resTick(){
+  const open=resIsOpenNow();
+  if(open&&!resWasOpen){resWasOpen=true;loadReservations();}
+  else if(!open){resWasOpen=false;}
+  const box=document.getElementById('resLocked');
+  if(box&&box.style.display!=='none')document.getElementById('resCountdown').textContent=resWaitLabel();
+}
+setInterval(resTick,30000);
+
 /* ---- タブ/ページ ---- */
 let currentTab='stock';
 function switchTab(t){currentTab=t;
@@ -2122,6 +2425,8 @@ function showPage(p){
   document.getElementById('tab-guide').classList.toggle('hide',p!=='guide');
   document.getElementById('tab-handover').classList.toggle('hide',p!=='handover');
   document.getElementById('handoverFormPage').classList.toggle('hide',p!=='handoverform');
+  document.getElementById('tab-reserve').classList.toggle('hide',p!=='reserve');
+  document.getElementById('resFormPage').classList.toggle('hide',p!=='resform');
   document.getElementById('tab-calc').classList.toggle('hide',p!=='calc');
   document.getElementById('formPage').classList.toggle('hide',p!=='form');
   document.getElementById('ingFormPage').classList.toggle('hide',p!=='ingform');
@@ -2133,6 +2438,7 @@ function showPage(p){
   document.getElementById('guideFormPage').classList.toggle('hide',p!=='guideform');
   document.getElementById('garbageFormPage').classList.toggle('hide',p!=='garbageform');
   if(p==='guide')renderGuide();
+  if(p==='reserve')renderReservations();
   const fab=document.getElementById('fab');
   if(p==='stock'){fab.classList.remove('hide');fab.textContent='＋ 食材を登録';}
   else if(p==='recipe'){fab.classList.remove('hide');fab.textContent='＋ レシピを登録';}
@@ -2144,6 +2450,11 @@ function showPage(p){
     else{fab.classList.remove('hide');fab.textContent='＋ 登録';}
   }
   else if(p==='handover'){fab.classList.remove('hide');fab.textContent='＋ 引き継ぎを登録';}
+  else if(p==='reserve'){
+    // 予約の登録ボタンはオーナーだけに出す
+    if(resIsOwner()){fab.classList.remove('hide');fab.textContent='＋ 予約を追加';}
+    else fab.classList.add('hide');
+  }
   else fab.classList.add('hide');
   window.scrollTo(0,0);
 }
@@ -2155,6 +2466,7 @@ function fabAction(){
   else if(currentTab==='supplier')openSupplierForm();
   else if(currentTab==='guide'){if(guideCat!=='garbage')openGuideForm();}
   else if(currentTab==='handover')openHandoverForm();
+  else if(currentTab==='reserve'){if(resIsOwner())openResForm();}
 }
 
 /* ---- 税込計算機 ---- */
