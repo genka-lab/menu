@@ -332,6 +332,18 @@ textarea:focus{border-color:var(--blue);background:#fff}
   border:1.5px solid var(--line);background:#fff;color:var(--sub);margin-bottom:12px}
 /* flex指定が .hide に勝ってしまうので打ち消す */
 .res_ownerbar.hide,.res_datebar.hide{display:none}
+
+/* ---- シフト（予約の見た目を流用しつつ緑系に） ---- */
+.sftcard{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--green);
+  border-radius:14px;padding:12px 14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04);
+  display:flex;align-items:center;gap:12px}
+.sft_time{font-size:22px;font-weight:800;color:var(--navy);letter-spacing:.5px;flex:0 0 auto;white-space:nowrap}
+.sft_time .to{font-size:13px;font-weight:700;color:var(--sub);margin-left:2px}
+.sft_who{flex:1 1 auto;min-width:0}
+.sft_name{font-size:17px;font-weight:800;color:var(--ink)}
+.sft_note{font-size:12px;font-weight:700;color:var(--sub);margin-top:3px}
+.sft_edit{flex:0 0 auto;padding:8px 12px;font-size:12px;font-weight:700;border-radius:10px;
+  border:1.5px solid var(--line);background:#fff;color:var(--sub)}
 </style>
 </head>
 <body>
@@ -369,6 +381,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
   <div class="tab" data-tab="guide" onclick="switchTab('guide')">📋業務<span class="cnt" id="cnt-guide"></span></div>
   <div class="tab" data-tab="handover" onclick="switchTab('handover')">📨引き継ぎ<span class="cnt" id="cnt-handover"></span></div>
   <div class="tab" data-tab="reserve" onclick="switchTab('reserve')">📅予約<span class="cnt" id="cnt-reserve"></span></div>
+  <div class="tab" data-tab="shift" onclick="switchTab('shift')">🗓シフト<span class="cnt" id="cnt-shift"></span></div>
   <div class="tab" data-tab="calc" onclick="switchTab('calc')">🧮税込</div>
 </div>
 
@@ -639,6 +652,50 @@ textarea:focus{border-color:var(--blue);background:#fff}
   </div>
 </div>
 
+<!-- ========== シフト 一覧 ========== -->
+<div id="tab-shift" class="wrap hide">
+  <div id="sftConnBar" class="conn off">接続中…</div>
+  <div id="sftOwnerBar" class="res_ownerbar hide">
+    🔑 オーナーモード（シフトの登録・全日程の閲覧ができます）
+    <button onclick="sftLogout()">解除</button>
+  </div>
+  <button id="sftLoginBtn" class="res_loginbtn" onclick="sftLogin()">🔑 オーナー（栗原）の方はこちら（パスワード）</button>
+  <div id="sftDateBar" class="res_datebar hide">
+    <button onclick="sftShiftDate(-1)">◀</button>
+    <input id="sft_date" type="date" onchange="renderShifts()">
+    <button onclick="sftShiftDate(1)">▶</button>
+    <button onclick="sftGoToday()">今日</button>
+  </div>
+  <div id="sftTodayBar" class="res_today hide"></div>
+  <div id="sftList"></div>
+  <div id="sftLocked" class="res_lockbox" style="display:none">
+    <div class="ic">🔒</div>
+    <h3>本日のシフトは 16:00 に公開されます</h3>
+    <p id="sftCountdown"></p>
+  </div>
+  <div id="sftEmpty" class="empty" style="display:none">この日の出勤予定は登録されていません。</div>
+</div>
+
+<!-- ========== シフト 登録/編集フォーム（オーナーのみ） ========== -->
+<div id="shiftFormPage" class="wrap hide">
+  <div class="card">
+    <h2 class="sec" id="sftFormTitle">＋ 出勤を追加</h2>
+    <label>📅 日付</label>
+    <input id="sf_date" type="date">
+    <label>👤 名前</label>
+    <input id="sf_name" placeholder="例：たなか">
+    <div class="row2">
+      <div><label>🕐 出勤（何時から）</label><input id="sf_start" type="time"></div>
+      <div><label>退勤（任意）</label><input id="sf_end" type="time"></div>
+    </div>
+    <label>メモ（任意・ホール／キッチン等）</label>
+    <input id="sf_note" placeholder="例：ホール">
+    <button class="btn" onclick="saveShift()">保存する</button>
+    <button class="btn sub" onclick="showPage('shift')">キャンセル</button>
+    <button class="btn danger hide" id="sftDelBtn" onclick="deleteShift()">この出勤を削除</button>
+  </div>
+</div>
+
 <!-- ========== 税込計算機 ========== -->
 <div id="tab-calc" class="wrap hide">
   <div class="card">
@@ -862,7 +919,9 @@ function initDB(){
   loadGuides();
   loadHandovers();
   loadReservations();
+  loadShifts();
   resWasOpen=resIsOpenNow(); // 起動直後に「16時になった」と誤判定しないように
+  sftWasOpen=sftIsOpenNow();
   setupRealtime();
 }
 
@@ -874,7 +933,7 @@ async function reloadAll(){
   try{
     await Promise.all([
       loadInventory(),loadRecipes(),loadMenus(),
-      loadPortions(),loadSuppliers(),loadGuides(),loadHandovers(),loadReservations()
+      loadPortions(),loadSuppliers(),loadGuides(),loadHandovers(),loadReservations(),loadShifts()
     ]);
   }catch(e){console.error(e);}
   finally{ if(btn)setTimeout(()=>btn.classList.remove('spin'),500); }
@@ -925,6 +984,7 @@ function setupRealtime(){
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_garbage'},loadGuides)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_handovers'},loadHandovers)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_reservations'},loadReservations)
+    .on('postgres_changes',{event:'*',schema:'public',table:'inv_shifts'},loadShifts)
     .subscribe();
 }
 
@@ -990,6 +1050,8 @@ function updateTabCounts(){
   setTabCount('cnt-handover',(typeof handovers!=='undefined'?handovers.filter(h=>!h.done).length:0));
   // 予約は「今日の分」の件数（16時前・非オーナーは0件＝バッジなし）
   setTabCount('cnt-reserve',(typeof reservations!=='undefined'?resOfDay(todayStr()).length:0));
+  // シフトも「今日の分」の件数（16時前・非オーナーは0件＝バッジなし）
+  setTabCount('cnt-shift',(typeof shifts!=='undefined'?sftOfDay(todayStr()).length:0));
 }
 function renderInventory(){
   updateTabCounts();
@@ -2412,6 +2474,184 @@ function resTick(){
 }
 setInterval(resTick,30000);
 
+/* ============================================================
+   シフト（本日分は16時に公開／登録はオーナー栗原のみ）
+   予約と同じ仕組み。16時前の当日分はSupabase側(RLS)で配信されない。
+   オーナーパスワードは予約と共通（private.res_owner_pass）。
+   ============================================================ */
+const SFT_OPEN_HOUR=16;
+let shifts=[], sftEditId=null, sftWasOpen=false;
+let sftOwnerPass=localStorage.getItem('izakaya_sft_owner')||'';
+function setSftConn(cls,text){const b=document.getElementById('sftConnBar');if(b){b.className='conn '+cls;b.textContent=text;}}
+function sftIsOwner(){return !!sftOwnerPass;}
+function sftIsOpenNow(){return new Date().getHours()>=SFT_OPEN_HOUR;}
+function sftWaitLabel(){
+  const now=new Date();
+  const open=new Date();open.setHours(SFT_OPEN_HOUR,0,0,0);
+  const ms=open-now;
+  if(ms<=0)return 'まもなく公開されます。「🔄更新」を押してください。';
+  const m=Math.ceil(ms/60000), h=Math.floor(m/60), mm=m%60;
+  return `公開まで あと ${h?h+'時間':''}${mm}分（${SFT_OPEN_HOUR}:00 になると自動で表示されます）`;
+}
+async function loadShifts(){
+  if(!db)return;
+  if(sftIsOwner()){
+    const r=await db.rpc('sft_list',{p_pass:sftOwnerPass});
+    if(!r.error){
+      shifts=r.data||[];
+      setSftConn('on','🟢 オーナーモード（すべての日程のシフトが見えます）');
+      renderShifts();
+      return;
+    }
+    console.error(r.error);
+    if(resIsPassErr(r.error)){
+      sftOwnerPass='';localStorage.removeItem('izakaya_sft_owner');
+    }else{
+      setSftConn('err','シフト表が未作成です（supabase_shifts.sql を実行してください）');
+      return;
+    }
+  }
+  const r=await db.from('inv_shifts').select('*');
+  if(r.error){
+    console.error(r.error);
+    setSftConn('err','シフト表が未作成です（supabase_shifts.sql を実行してください）');
+    return;
+  }
+  shifts=r.data||[];
+  setSftConn('on',`🟢 オンライン共有中（本日のシフトは${SFT_OPEN_HOUR}時に公開）`);
+  renderShifts();
+}
+/* その日のシフトを出勤時間順に */
+function sftOfDay(ymd){
+  return shifts.filter(s=>s.work_on===ymd).sort((a,b)=>{
+    const ta=a.start_at||'99:99', tb=b.start_at||'99:99';
+    return ta<tb?-1:ta>tb?1:0;
+  });
+}
+function renderShifts(){
+  updateTabCounts();
+  const owner=sftIsOwner();
+  document.getElementById('sftOwnerBar').classList.toggle('hide',!owner);
+  document.getElementById('sftLoginBtn').classList.toggle('hide',owner);
+  document.getElementById('sftDateBar').classList.toggle('hide',!owner);
+  const dateEl=document.getElementById('sft_date');
+  if(owner&&!dateEl.value)dateEl.value=todayStr();
+  const day=owner?(dateEl.value||todayStr()):todayStr();
+  const list=sftOfDay(day);
+  // 16時前はサーバーが本日分を渡さないので list は空になる（＝ロック画面）
+  const locked=!owner&&!sftIsOpenNow()&&!list.length;
+  const todayBar=document.getElementById('sftTodayBar');
+  todayBar.classList.toggle('hide',owner||locked);
+  if(!owner&&!locked){
+    todayBar.innerHTML=`🗓 本日 ${resDateLabel(day)} の出勤 ${list.length}名`;
+  }
+  document.getElementById('sftLocked').style.display=locked?'block':'none';
+  if(locked)document.getElementById('sftCountdown').textContent=sftWaitLabel();
+  document.getElementById('sftEmpty').style.display=(!locked&&!list.length)?'block':'none';
+  document.getElementById('sftList').innerHTML=locked?'':list.map(s=>{
+    const st=(s.start_at||'').slice(0,5), en=(s.end_at||'').slice(0,5);
+    const time=st?`${esc(st)}${en?`<span class="to">〜${esc(en)}</span>`:'〜'}`:'時間未定';
+    return `<div class="sftcard">
+      <span class="sft_time">${time}</span>
+      <span class="sft_who">
+        <span class="sft_name">${esc(s.staff_name||'（名前なし）')}</span>
+        ${s.note?`<span class="sft_note">${esc(s.note)}</span>`:''}
+      </span>
+      ${owner?`<button class="sft_edit" onclick="openShiftForm('${s.id}')">✏️</button>`:''}
+    </div>`;
+  }).join('');
+}
+function sftShiftDate(d){
+  const el=document.getElementById('sft_date');
+  const base=new Date((el.value||todayStr())+'T00:00:00');
+  base.setDate(base.getDate()+d);
+  const p=n=>String(n).padStart(2,'0');
+  el.value=`${base.getFullYear()}-${p(base.getMonth()+1)}-${p(base.getDate())}`;
+  renderShifts();
+}
+function sftGoToday(){document.getElementById('sft_date').value=todayStr();renderShifts();}
+/* ---- オーナー認証（パスワードは予約と共通・Supabase側で照合） ---- */
+async function sftLogin(){
+  if(!db){alert('接続がありません');return;}
+  const p=(prompt('オーナーパスワードを入力してください（予約と共通）：')||'').trim();
+  if(!p)return;
+  showSaving(true);
+  const r=await db.rpc('sft_list',{p_pass:p});
+  showSaving(false);
+  if(r.error){
+    if(resIsPassErr(r.error)){alert('パスワードが違います。');return;}
+    console.error(r.error);
+    alert('確認に失敗しました：'+(r.error.message||r.error));
+    return;
+  }
+  sftOwnerPass=p;localStorage.setItem('izakaya_sft_owner',p);
+  shifts=r.data||[];
+  document.getElementById('sft_date').value=todayStr();
+  setSftConn('on','🟢 オーナーモード（すべての日程のシフトが見えます）');
+  showPage('shift');
+}
+function sftLogout(){
+  sftOwnerPass='';localStorage.removeItem('izakaya_sft_owner');
+  shifts=[];
+  showPage('shift');
+  loadShifts();
+}
+/* ---- 登録/編集フォーム ---- */
+function openShiftForm(id){
+  if(!sftIsOwner()){alert('シフトの登録はオーナー（栗原）のみです。');return;}
+  sftEditId=id||null;
+  document.getElementById('sftFormTitle').textContent=id?'出勤を編集':'＋ 出勤を追加';
+  document.getElementById('sftDelBtn').classList.toggle('hide',!id);
+  const s=id?shifts.find(x=>x.id===id):null;
+  sf_date.value=s?s.work_on:(document.getElementById('sft_date').value||todayStr());
+  sf_name.value=s?s.staff_name:'';
+  sf_start.value=s?(s.start_at||'').slice(0,5):'';
+  sf_end.value=s?(s.end_at||'').slice(0,5):'';
+  sf_note.value=s?s.note:'';
+  showPage('shiftform');
+}
+async function saveShift(){
+  if(!db){alert('接続がありません');return;}
+  if(!sftIsOwner()){alert('シフトの登録はオーナー（栗原）のみです。');return;}
+  if(!sf_date.value){alert('日付を入れてください');return;}
+  if(!sf_name.value.trim()){alert('名前を入れてください');return;}
+  showSaving(true);
+  const r=await db.rpc('sft_save',{
+    p_pass:sftOwnerPass, p_id:sftEditId, p_on:sf_date.value,
+    p_name:sf_name.value.trim(), p_start:sf_start.value||'', p_end:sf_end.value||'',
+    p_note:sf_note.value.trim()
+  });
+  showSaving(false);
+  if(r.error){
+    console.error(r.error);
+    alert(resIsPassErr(r.error)?'オーナーパスワードが変わっています。もう一度ログインしてください。'
+                              :'保存に失敗しました：'+(r.error.message||r.error));
+    return;
+  }
+  document.getElementById('sft_date').value=sf_date.value;
+  showPage('shift');
+  loadShifts();
+}
+async function deleteShift(){
+  if(!sftEditId||!db||!sftIsOwner())return;
+  if(!confirmDelete('この出勤を削除しますか？'))return;
+  showSaving(true);
+  const r=await db.rpc('sft_delete',{p_pass:sftOwnerPass,p_id:sftEditId});
+  showSaving(false);
+  if(r.error){console.error(r.error);alert('削除に失敗しました：'+(r.error.message||r.error));return;}
+  showPage('shift');
+  loadShifts();
+}
+/* ---- 16時になったら自動で公開（カウントダウンも更新） ---- */
+function sftTick(){
+  const open=sftIsOpenNow();
+  if(open&&!sftWasOpen){sftWasOpen=true;loadShifts();}
+  else if(!open){sftWasOpen=false;}
+  const box=document.getElementById('sftLocked');
+  if(box&&box.style.display!=='none')document.getElementById('sftCountdown').textContent=sftWaitLabel();
+}
+setInterval(sftTick,30000);
+
 /* ---- タブ/ページ ---- */
 let currentTab='stock';
 function switchTab(t){currentTab=t;
@@ -2427,6 +2667,8 @@ function showPage(p){
   document.getElementById('handoverFormPage').classList.toggle('hide',p!=='handoverform');
   document.getElementById('tab-reserve').classList.toggle('hide',p!=='reserve');
   document.getElementById('resFormPage').classList.toggle('hide',p!=='resform');
+  document.getElementById('tab-shift').classList.toggle('hide',p!=='shift');
+  document.getElementById('shiftFormPage').classList.toggle('hide',p!=='shiftform');
   document.getElementById('tab-calc').classList.toggle('hide',p!=='calc');
   document.getElementById('formPage').classList.toggle('hide',p!=='form');
   document.getElementById('ingFormPage').classList.toggle('hide',p!=='ingform');
@@ -2439,6 +2681,7 @@ function showPage(p){
   document.getElementById('garbageFormPage').classList.toggle('hide',p!=='garbageform');
   if(p==='guide')renderGuide();
   if(p==='reserve')renderReservations();
+  if(p==='shift')renderShifts();
   const fab=document.getElementById('fab');
   if(p==='stock'){fab.classList.remove('hide');fab.textContent='＋ 食材を登録';}
   else if(p==='recipe'){fab.classList.remove('hide');fab.textContent='＋ レシピを登録';}
@@ -2455,6 +2698,11 @@ function showPage(p){
     if(resIsOwner()){fab.classList.remove('hide');fab.textContent='＋ 予約を追加';}
     else fab.classList.add('hide');
   }
+  else if(p==='shift'){
+    // シフトの登録ボタンはオーナー（栗原）だけに出す
+    if(sftIsOwner()){fab.classList.remove('hide');fab.textContent='＋ 出勤を追加';}
+    else fab.classList.add('hide');
+  }
   else fab.classList.add('hide');
   window.scrollTo(0,0);
 }
@@ -2467,6 +2715,7 @@ function fabAction(){
   else if(currentTab==='guide'){if(guideCat!=='garbage')openGuideForm();}
   else if(currentTab==='handover')openHandoverForm();
   else if(currentTab==='reserve'){if(resIsOwner())openResForm();}
+  else if(currentTab==='shift'){if(sftIsOwner())openShiftForm();}
 }
 
 /* ---- 税込計算機 ---- */
