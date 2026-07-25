@@ -1,30 +1,30 @@
 -- ============================================================
--- 居酒屋メニューアプリ 2026-07-26 機能追加 まとめSQL
---   ① レシピに「フード / ドリンク」種別
---   ② 小分けの写真を複数枚に
---   ③ 掃除/オープン準備/閉店作業/ゴミ分別のチェック項目
---      ＋ 共有チェック表（誰がいつチェックしたか・毎日リセット）
---   ④ シフトに「役割」（ホール/キッチン等）
---   ⑤ 設備清掃（ビールサーバー/フライヤー）の週次アラームの記録先
--- 実行方法: Supabase → SQL Editor に貼り付けて Run（一度だけ）
--- ※ 何度実行しても安全な書き方にしてあります
+-- Izakaya app update 2026-07-26 (safe to run multiple times)
+--  (1) recipes: food / drink type
+--  (2) portions: multiple photos
+--  (3) guides + garbage: checklist items
+--      + shared check table (who checked, resets daily)
+--  (4) shifts: role (hall / kitchen etc.)
+--  (5) weekly equipment cleaning uses (3)'s check table
+--  (6) staff roster (pick names when adding a shift)
+-- How to run: Supabase -> SQL Editor -> paste all -> Run (once)
 -- ============================================================
 
--- ① レシピ：フード / ドリンク種別（既存レシピは全部フード扱いになります）
+-- (1) recipes: food / drink type (existing recipes become 'food')
 alter table inv_recipes add column if not exists rtype text not null default 'food';
 
--- ② 小分け：複数写真 [{url, caption}, ...]
+-- (2) portions: multiple photos [{url, caption}, ...]
 alter table inv_portions add column if not exists photos jsonb not null default '[]'::jsonb;
 
--- ③ 業務・ゴミ分別：チェック項目（["床のモップがけ", ...] のような文字列の配列）
+-- (3) guides + garbage: checklist items (array of strings)
 alter table inv_guides  add column if not exists checklist jsonb not null default '[]'::jsonb;
 alter table inv_garbage add column if not exists checklist jsonb not null default '[]'::jsonb;
 
--- ③' 共有チェック表：その日に誰がチェックしたかを全端末で共有
---     source: guide:<id> ／ garbage:<曜日0-6> ／ machine:<id>（設備清掃）
+-- (3)' shared check table: who checked what, per day (shared by all devices)
+--      source: guide:<id> / garbage:<0-6 weekday> / machine:<id>
 create table if not exists inv_checks (
   id         uuid primary key default gen_random_uuid(),
-  check_on   date not null,                    -- チェックした日（毎日リセットの単位）
+  check_on   date not null,
   source     text not null,
   item_idx   int  not null default 0,
   label      text not null default '',
@@ -41,10 +41,10 @@ do $$ begin
   alter publication supabase_realtime add table inv_checks;
 exception when duplicate_object then null; end $$;
 
--- ④ シフト：役割（ホール/キッチン/カウンター等）
+-- (4) shifts: role column
 alter table inv_shifts add column if not exists role text not null default '';
 
--- 旧バージョンの sft_save（役割なし・7引数）を新バージョン（8引数）に置き換え
+-- replace old sft_save (7 args, no role) with new one (8 args)
 drop function if exists sft_save(text,uuid,date,text,text,text,text);
 create or replace function sft_save(
   p_pass  text,
@@ -80,10 +80,11 @@ begin
   return v_id;
 end $$;
 
--- ⑤ 設備清掃は追加のテーブル不要（inv_guides の category='machine' と inv_checks を使います）
+-- (5) weekly equipment cleaning: no extra table needed
+--     (uses inv_guides category='machine' and inv_checks)
 
--- ⑥ スタッフ名簿（シフトの「＋出勤を追加」で名前を一覧から選べるように）
---    読み取りは全員OK・追加/削除はオーナーのみ（予約・シフトと同じパスワード）
+-- (6) staff roster: everyone can read, only the owner can add/delete
+--     (same owner password as reservations / shifts)
 create table if not exists inv_staff (
   id         uuid primary key default gen_random_uuid(),
   name       text not null default '',
@@ -121,4 +122,4 @@ begin
   delete from inv_staff where id=p_id;
 end $$;
 
--- 完了。実行後にアプリを再読み込みしてください。
+-- Done. Reload the app after running this.
