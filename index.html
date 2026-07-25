@@ -2468,6 +2468,39 @@ async function loadHandovers(){
   setHoConn('on','🟢 オンライン共有中（引き継ぎは全員で共有）');
   renderHandovers();
   renderNotifyBar();
+  cleanupHandovers(); // 確認済みから1週間たったものを自動削除（写真ごと）
+}
+/* ---- 確認済み→1週間で自動削除 ---- */
+const HO_KEEP_DAYS=7;
+function hoReadTime(h){
+  const t=new Date(h.read_at||h.updated_at||h.created_at||'').getTime();
+  return isFinite(t)?t:null;
+}
+let hoCleaning=false;
+async function cleanupHandovers(){
+  if(!db||hoCleaning)return;
+  const cutoff=Date.now()-HO_KEEP_DAYS*86400000;
+  const expired=handovers.filter(h=>{
+    if(!h.done)return false;               // 未確認は絶対に消さない
+    const t=hoReadTime(h);
+    return t!==null&&t<cutoff;
+  });
+  if(!expired.length)return;
+  hoCleaning=true;
+  try{
+    for(const h of expired){
+      try{
+        const {data:files}=await db.storage.from('recipe-photos').list(h.id);
+        if(files&&files.length)await db.storage.from('recipe-photos').remove(files.map(f=>`${h.id}/${f.name}`));
+      }catch(e){console.error(e);}
+      const {error}=await db.from('inv_handovers').delete().eq('id',h.id);
+      if(error)console.error(error);
+    }
+    const ids=new Set(expired.map(h=>h.id));
+    handovers=handovers.filter(h=>!ids.has(h.id));
+    renderHandovers();
+    renderNotifyBar();
+  }finally{hoCleaning=false;}
 }
 /* 未確認→新しい順を上に、確認済→新しい順を下に */
 function sortedHandovers(){
@@ -2511,8 +2544,14 @@ function renderHandovers(){
     const photos=Array.isArray(h.photos)?h.photos:[];
     const gallery=photos.length?`<div class="ho_gallery">${photos.map(p=>
       `<figure><img src="${escA(p.url)}" onclick="lightbox('${escA(p.url)}')"><figcaption>${esc(p.caption||'')}</figcaption></figure>`).join('')}</div>`:'';
+    let delNote='';
+    if(h.done){
+      const t=hoReadTime(h);
+      const left=t!==null?Math.max(0,Math.ceil((t+HO_KEEP_DAYS*86400000-Date.now())/86400000)):null;
+      delNote=left===null?'':left<=0?'　🗑 まもなく自動削除':`　🗑 あと${left}日で自動削除`;
+    }
     const foot=h.done
-      ? `<div class="ho_readinfo">✔ ${esc(h.read_by||'')||'誰か'} さんが確認済${h.read_at?`（${hoReadLabel(h.read_at)}）`:''}</div>
+      ? `<div class="ho_readinfo">✔ ${esc(h.read_by||'')||'誰か'} さんが確認済${h.read_at?`（${hoReadLabel(h.read_at)}）`:''}${delNote}</div>
          <button class="ho_edit" onclick="unreadHandover('${h.id}')">↩ 未確認に戻す</button>
          <button class="ho_edit" onclick="openHandoverForm('${h.id}')">✏️ 編集する</button>`
       : `<button class="ho_read" onclick="markHandoverRead('${h.id}')">✅ 確認済にする</button>
