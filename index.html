@@ -2908,9 +2908,10 @@ function sftStaffNames(){
     .sort((a,b)=>a.localeCompare(b,'ja'));
 }
 /* 役割（メイン1つ＋サブ複数）。role列に {"m":"カウンター","s":["ホール"]} 形式で保存 */
-const SFT_ROLES=['カウンター','キッチン','ホール'];
+const SFT_ROLES=['カウンター','キッチン','ホール','チラシ配り','チラシ作成','SNS対応'];
 const SFT_ROLE_COLORS={
   'ホール':['#e7eef7','#2E5E8C'],'キッチン':['#fdeede','#C55A11'],'カウンター':['#f3e8fd','#7d3ac1'],
+  'チラシ配り':['#e2efda','#2E7D46'],'チラシ作成':['#e2f4f7','#0e7490'],'SNS対応':['#fde8ef','#b0356e'],
   '洗い場':['#e2f4f7','#0e7490'],'仕込み':['#e2efda','#2E7D46'],'レジ':['#fff0b8','#8a6d00'],'ヘルプ':['#fde8ef','#b0356e']
 };
 function sftRoleParse(v){
