@@ -364,6 +364,13 @@ textarea:focus{border-color:var(--blue);background:#fff}
 .stfrow button{padding:7px 12px;font-size:12px;font-weight:700;border-radius:8px;border:1.5px solid var(--red);background:#fff;color:var(--red)}
 /* シフト役割チップ */
 .sft_role{display:inline-block;font-size:11px;font-weight:800;padding:2px 9px;border-radius:999px;background:#eef1f5;color:var(--sub);margin-right:7px;vertical-align:2px;white-space:nowrap}
+.sft_role.subr{background:#fff;border:1.5px solid var(--line)}
+/* 役割のチェック式ピッカー（シフトフォーム） */
+.rolepick{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
+.rolepick button{padding:10px 16px;font-size:14px;font-weight:700;border-radius:999px;border:1.5px solid var(--line);background:#fff;color:var(--sub)}
+.rolepick button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.rolepick.sub button.on{background:var(--green);border-color:var(--green)}
+.rolepick button:disabled{opacity:.35}
 /* ===== 赤いチェック通知バー（引き継ぎの黄色とは別・全部チェックするまで消えない） ===== */
 .checkbar{display:none;margin:0;padding:11px 14px;background:#c0392b;border-bottom:2px solid #8f2318;color:#fff;
   font-size:13.5px;font-weight:700;line-height:1.6;box-shadow:0 3px 8px rgba(0,0,0,.15);cursor:pointer;animation:checkpulse 1.6s ease-in-out infinite}
@@ -753,12 +760,10 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <select id="shf_name_sel" class="hide" onchange="onShfNameSel()"></select>
     <input id="shf_name" placeholder="例：たなか">
     <div class="note" id="shf_name_note">👥 「スタッフ名簿」に登録すると、ここで一覧から選べるようになります。</div>
-    <label>役割（ホール／キッチンなど）</label>
-    <select id="shf_role">
-      <option value="">（なし）</option>
-      <option>ホール</option><option>キッチン</option><option>カウンター</option>
-      <option>洗い場</option><option>仕込み</option><option>レジ</option><option>ヘルプ</option>
-    </select>
+    <label>役割【メイン】（1つ選ぶ・もう一度押すと解除）</label>
+    <div class="rolepick" id="shf_role_main"></div>
+    <label>役割【サブ】（任意・複数OK）</label>
+    <div class="rolepick sub" id="shf_role_sub"></div>
     <div class="row2">
       <div><label>🕐 出勤（何時から）</label><input id="shf_start" type="time"></div>
       <div><label>退勤（任意）</label><input id="shf_end" type="time"></div>
@@ -2902,17 +2907,61 @@ function sftStaffNames(){
   return [...new Set(shifts.map(s=>(s.staff_name||'').trim()).filter(Boolean))]
     .sort((a,b)=>a.localeCompare(b,'ja'));
 }
-/* 役割チップ（色分け） */
+/* 役割（メイン1つ＋サブ複数）。role列に {"m":"カウンター","s":["ホール"]} 形式で保存 */
+const SFT_ROLES=['カウンター','キッチン','ホール'];
 const SFT_ROLE_COLORS={
   'ホール':['#e7eef7','#2E5E8C'],'キッチン':['#fdeede','#C55A11'],'カウンター':['#f3e8fd','#7d3ac1'],
   '洗い場':['#e2f4f7','#0e7490'],'仕込み':['#e2efda','#2E7D46'],'レジ':['#fff0b8','#8a6d00'],'ヘルプ':['#fde8ef','#b0356e']
 };
+function sftRoleParse(v){
+  v=String(v||'').trim();
+  if(!v)return{m:'',s:[]};
+  if(v[0]==='{'){
+    try{const o=JSON.parse(v);return{m:String(o.m||'').trim(),s:Array.isArray(o.s)?o.s.map(x=>String(x||'').trim()).filter(Boolean):[]};}
+    catch(e){}
+  }
+  return{m:v,s:[]}; // 旧データ（プレーン文字列）はメイン扱い
+}
+function sftRoleStringify(r){return(!r.m&&!r.s.length)?'':JSON.stringify({m:r.m,s:r.s});}
 function roleChip(role){
   const c=SFT_ROLE_COLORS[role]||['#eef1f5','#64748b'];
   return `<span class="sft_role" style="background:${c[0]};color:${c[1]}">${esc(role)}</span>`;
 }
+function roleChipSub(role){
+  const c=SFT_ROLE_COLORS[role]||['#eef1f5','#64748b'];
+  return `<span class="sft_role subr" style="color:${c[1]}">サブ ${esc(role)}</span>`;
+}
+function roleChips(v){
+  const r=sftRoleParse(v);
+  return (r.m?roleChip(r.m):'')+r.s.map(roleChipSub).join('');
+}
 let sftRoleFilter='';
 function setSftRole(r){sftRoleFilter=r;renderShifts();}
+/* ---- フォームの役割ピッカー ---- */
+let draftShiftRole={m:'',s:[]};
+function shfRoleOptions(){
+  // 固定3択＋（編集中データに旧役割が入っていたら消えないよう一時的に選択肢へ足す）
+  const opts=SFT_ROLES.slice();
+  [draftShiftRole.m,...draftShiftRole.s].forEach(n=>{if(n&&!opts.includes(n))opts.push(n);});
+  return opts;
+}
+function renderShfRoleUI(){
+  const opts=shfRoleOptions();
+  document.getElementById('shf_role_main').innerHTML=opts.map(n=>
+    `<button type="button" class="${draftShiftRole.m===n?'on':''}" onclick="setShfMain('${escA(n)}')">${esc(n)}</button>`).join('');
+  document.getElementById('shf_role_sub').innerHTML=opts.map(n=>
+    `<button type="button" class="${draftShiftRole.s.includes(n)?'on':''}" ${draftShiftRole.m===n?'disabled':''} onclick="toggleShfSub('${escA(n)}')">${esc(n)}</button>`).join('');
+}
+function setShfMain(n){
+  draftShiftRole.m=(draftShiftRole.m===n)?'':n;
+  draftShiftRole.s=draftShiftRole.s.filter(x=>x!==draftShiftRole.m); // メインと同じサブは外す
+  renderShfRoleUI();
+}
+function toggleShfSub(n){
+  const i=draftShiftRole.s.indexOf(n);
+  if(i>=0)draftShiftRole.s.splice(i,1);else draftShiftRole.s.push(n);
+  renderShfRoleUI();
+}
 /* ---- スタッフ名簿（登録した名前を出勤追加のプルダウンに出す） ---- */
 let staffList=[];
 async function loadStaff(){
@@ -3032,15 +3081,15 @@ function renderShifts(){
   // 16時前はサーバーが本日分を渡さないので list は空になる（＝ロック画面）
   const fullList=list;
   const locked=!owner&&!sftIsOpenNow()&&!fullList.length;
-  // 役割で絞り込み（役割が登録されている時だけバーを出す）
-  const roles=[...new Set(fullList.map(s=>(s.role||'').trim()).filter(Boolean))];
+  // 役割で絞り込み（メイン・サブどちらかに含まれれば一致。役割が登録されている時だけバーを出す）
+  const roles=[...new Set(fullList.flatMap(s=>{const r=sftRoleParse(s.role);return [r.m,...r.s];}).filter(Boolean))];
   const roleBar=document.getElementById('sftRoleBar');
   if(!locked&&roles.length){
     if(sftRoleFilter&&!roles.includes(sftRoleFilter))sftRoleFilter='';
     roleBar.classList.remove('hide');
     roleBar.innerHTML=`<button class="${!sftRoleFilter?'on':''}" onclick="setSftRole('')">すべて</button>`+
       roles.map(r=>`<button class="${sftRoleFilter===r?'on':''}" onclick="setSftRole('${escA(r)}')">${esc(r)}</button>`).join('');
-    if(sftRoleFilter)list=list.filter(s=>(s.role||'').trim()===sftRoleFilter);
+    if(sftRoleFilter)list=list.filter(s=>{const r=sftRoleParse(s.role);return r.m===sftRoleFilter||r.s.includes(sftRoleFilter);});
   }else{
     sftRoleFilter='';
     roleBar.classList.add('hide');
@@ -3069,7 +3118,7 @@ function renderShifts(){
       ${datePrefix}
       <span class="sft_time">${time}</span>
       <span class="sft_who">
-        <span class="sft_name">${(s.role||'').trim()?roleChip((s.role||'').trim()):''}${esc(s.staff_name||'（名前なし）')}</span>
+        <span class="sft_name">${roleChips(s.role)}${esc(s.staff_name||'（名前なし）')}</span>
         ${s.note?`<span class="sft_note">${esc(s.note)}</span>`:''}
       </span>
       ${owner?`<button class="sft_edit" onclick="openShiftForm('${s.id}')">✏️</button>`:''}
@@ -3120,7 +3169,8 @@ function openShiftForm(id){
   const s=id?shifts.find(x=>x.id===id):null;
   shf_date.value=s?s.work_on:(document.getElementById('sft_date').value||todayStr());
   renderShfNameUI(s?s.staff_name:'');
-  shf_role.value=s?(s.role||''):'';
+  draftShiftRole=sftRoleParse(s?s.role:'');
+  renderShfRoleUI();
   shf_start.value=s?(s.start_at||'').slice(0,5):'';
   shf_end.value=s?(s.end_at||'').slice(0,5):'';
   shf_note.value=s?s.note:'';
@@ -3136,7 +3186,7 @@ async function saveShift(){
   const r=await db.rpc('sft_save',{
     p_pass:sftOwnerPass, p_id:sftEditId, p_on:shf_date.value,
     p_name:staffName, p_start:shf_start.value||'', p_end:shf_end.value||'',
-    p_note:shf_note.value.trim(), p_role:shf_role.value||''
+    p_note:shf_note.value.trim(), p_role:sftRoleStringify(draftShiftRole)
   });
   showSaving(false);
   if(r.error){
