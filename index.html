@@ -1966,13 +1966,14 @@ function courseCalc(c,n){
   const price=+c.price||0, rev=price*n;
   return{cost,missing,rows,price,rev,profit:rev-cost,rate:rev>0?cost/rev*100:0};
 }
-/* 人数別シミュレーション表（2/3/4/6/8人） */
-const CRS_SIM_NS=[2,3,4,6,8];
+/* 人数別シミュレーション（最大収容24〜25名の店に合わせる） */
+const CRS_SIM_NS=[2,4,6,8,12,16,20,24];            // 表に出す人数
+const CRS_SIM_PICK=[2,3,4,5,6,8,10,12,15,18,20,24]; // フォームの人数切替ボタン（横スクロール）
 function courseSimTableHTML(calcFn,price){
   return `<table><tr><th>人数</th><th>売上</th><th>原価</th><th>粗利</th><th>原価率</th></tr>`+
     CRS_SIM_NS.map(n=>{
       const k=calcFn(n);
-      return `<tr><td>${n}人</td><td class="price">${yen(price*n)}</td><td>${yen(k.cost)}</td><td class="${(price*n-k.cost)<0?'neg':''}">${yen(price*n-k.cost)}</td><td><span class="rate ${rateClass(k.rate)}">${k.rate.toFixed(1)}%</span></td></tr>`;
+      return `<tr><td>${n}人${n>=24?'<br><span style="font-size:10px;color:var(--sub)">貸切</span>':''}</td><td class="price">${yen(price*n)}</td><td>${yen(k.cost)}</td><td class="${(price*n-k.cost)<0?'neg':''}">${yen(price*n-k.cost)}</td><td><span class="rate ${rateClass(k.rate)}">${k.rate.toFixed(1)}%</span></td></tr>`;
     }).join('')+`</table>`;
 }
 function svChip(r){
@@ -2012,9 +2013,9 @@ function openCourseForm(id){
 let crsSimN=2; // シミュレーション人数（コースは2人から）
 function setCrsSimN(n){crsSimN=n;renderCourseForm();}
 function renderCourseForm(){
-  // 人数切り替え
-  document.getElementById('cf_simn').innerHTML=CRS_SIM_NS.map(n=>
-    `<button class="${crsSimN===n?'on':''}" onclick="setCrsSimN(${n})">${n}人</button>`).join('');
+  // 人数切り替え（24人=ほぼ貸切まで）
+  document.getElementById('cf_simn').innerHTML=CRS_SIM_PICK.map(n=>
+    `<button class="${crsSimN===n?'on':''}" onclick="setCrsSimN(${n})">${n}人${n>=24?'(貸切)':''}</button>`).join('');
   // 選択済み（コースの中身）
   const sel=document.getElementById('cf_selected');
   sel.innerHTML=draftCourse.items.length?draftCourse.items.map((x,i)=>{
