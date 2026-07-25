@@ -127,4 +127,22 @@ begin
   delete from inv_staff where id=p_id;
 end $$;
 
+-- (7) course maker: combine menus into a course, live cost-rate display
+create table if not exists inv_courses (
+  id         uuid primary key default gen_random_uuid(),
+  name       text    not null default '',
+  price      numeric not null default 0,
+  items      jsonb   not null default '[]'::jsonb,   -- [{id:<inv_menus.id>, menu:<name>}, ...]
+  sort_order int     not null default 0,
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+alter table inv_courses enable row level security;
+do $$ begin
+  create policy "inv_courses_all" on inv_courses for all using (true) with check (true);
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table inv_courses;
+exception when duplicate_object then null; end $$;
+
 -- Done. Reload the app after running this.

@@ -401,6 +401,35 @@ textarea:focus{border-color:var(--blue);background:#fff}
 .mcnote{margin-top:8px;font-size:11px;color:var(--sub)}
 /* 小分け写真の説明 */
 .pc_cap{font-size:12px;color:var(--sub);margin-top:4px;text-align:center;line-height:1.4}
+/* ===== コースメーカー ===== */
+.crscard{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--orange);
+  border-radius:14px;padding:12px 14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.crs_top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.crs_name{font-size:17px;font-weight:800;margin:0}
+.crs_price{font-size:21px;font-weight:800;color:var(--navy);white-space:nowrap}
+.crs_items{margin-top:8px;font-size:13px}
+.crs_items .ci{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px dashed #eef1f5}
+.crs_items .ci b{color:var(--sub);font-weight:600;white-space:nowrap}
+.crs_items .ci.miss{color:var(--red)}
+/* コース編集: 選択済み/候補の行 */
+.pickrow{display:flex;align-items:center;gap:8px;padding:9px 2px;border-bottom:1px dashed #eef1f5}
+.pickrow .nm{flex:1;font-weight:700;font-size:14px;min-width:0}
+.pickrow .nm .sub2{display:block;font-size:11px;font-weight:600;color:var(--sub)}
+.pickrow .rate{flex:0 0 auto}
+.pickrow button{flex:0 0 auto;padding:8px 14px;border-radius:9px;font-weight:800;font-size:14px;
+  border:1.5px solid var(--green);color:var(--green);background:#fff}
+.pickrow button.rmv{border-color:var(--red);color:var(--red);padding:8px 12px}
+.pickrow .cnt2{flex:0 0 auto;font-size:11px;font-weight:800;color:#fff;background:var(--orange);
+  border-radius:999px;padding:2px 8px;white-space:nowrap}
+.pickempty{padding:14px 4px;font-size:13px;color:var(--sub)}
+/* コース編集中の画面下・集計バー */
+.crsbar{position:fixed;left:14px;right:14px;bottom:16px;z-index:31;background:var(--navy);color:#fff;
+  border-radius:14px;padding:11px 16px;box-shadow:0 4px 14px rgba(31,59,87,.45);
+  display:none;justify-content:space-between;align-items:center;gap:10px;font-weight:800;font-size:14px}
+.crsbar.show{display:flex}
+.crsbar .l{line-height:1.4}
+.crsbar .l small{display:block;font-size:11px;font-weight:700;opacity:.8}
+.crsbar .rate{font-size:16px;padding:4px 12px}
 </style>
 </head>
 <body>
@@ -433,6 +462,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
   <div class="tab active" data-tab="stock" onclick="switchTab('stock')">📦在庫<span class="cnt" id="cnt-stock"></span></div>
   <div class="tab" data-tab="recipe" onclick="switchTab('recipe')">📖レシピ<span class="cnt" id="cnt-recipe"></span></div>
   <div class="tab" data-tab="list" onclick="switchTab('list')">🍽メニュー<span class="cnt" id="cnt-list"></span></div>
+  <div class="tab" data-tab="course" onclick="switchTab('course')">🍱コース<span class="cnt" id="cnt-course"></span></div>
   <div class="tab" data-tab="portion" onclick="switchTab('portion')">🔪小分け<span class="cnt" id="cnt-portion"></span></div>
   <div class="tab" data-tab="supplier" onclick="switchTab('supplier')">🏢取引先<span class="cnt" id="cnt-supplier"></span></div>
   <div class="tab" data-tab="guide" onclick="switchTab('guide')">📋業務<span class="cnt" id="cnt-guide"></span></div>
@@ -597,6 +627,34 @@ textarea:focus{border-color:var(--blue);background:#fff}
   <div id="itemList"></div>
   <div id="emptyMsg" class="empty">
     まだメニューがありません。<br>下の「＋ メニューを追加」から登録してください。
+  </div>
+</div>
+
+<!-- ========== コース 一覧 ========== -->
+<div id="tab-course" class="wrap hide">
+  <div id="crsConnBar" class="conn off">接続中…</div>
+  <div id="courseList"></div>
+  <div id="courseEmpty" class="empty" style="display:none">
+    まだコースがありません。<br>下の「＋ コースを作る」から、メニューを組み合わせて<br>原価率を見ながらコースを作れます。
+  </div>
+</div>
+
+<!-- ========== コース 作成/編集フォーム ========== -->
+<div id="courseFormPage" class="wrap hide" style="padding-bottom:120px">
+  <div class="card">
+    <h2 class="sec" id="courseFormTitle">＋ コースを作る</h2>
+    <label>コース名</label>
+    <input id="cf_name" placeholder="例：3,000円 定番コース">
+    <label>コース売価（税込・円）</label>
+    <input id="cf_price" type="number" inputmode="decimal" placeholder="3000" oninput="updateCourseBar()">
+    <h2 class="sec" style="margin-top:18px">🍱 コースの中身（✕で外す）</h2>
+    <div id="cf_selected"></div>
+    <h2 class="sec" style="margin-top:18px">＋ メニューから追加</h2>
+    <input id="cf_search" placeholder="🔍 メニュー名で検索（一部だけでOK）" oninput="renderCourseForm()">
+    <div id="cf_cands"></div>
+    <button class="btn" onclick="saveCourse()">保存する</button>
+    <button class="btn sub" onclick="showPage('course')">キャンセル</button>
+    <button class="btn danger hide" id="courseDelBtn" onclick="deleteCourse()">このコースを削除</button>
   </div>
 </div>
 
@@ -946,6 +1004,9 @@ textarea:focus{border-color:var(--blue);background:#fff}
   </div>
 </div>
 
+<!-- コース編集中の画面下・リアルタイム集計バー -->
+<div id="crsBar" class="crsbar"></div>
+
 <div id="lightbox" class="lightbox" onclick="this.style.display='none'">
   <button class="x">✕</button><img id="lightboxImg" src="" alt="">
 </div>
@@ -1025,6 +1086,7 @@ function initDB(){
   loadInventory();
   loadRecipes();
   loadMenus();
+  loadCourses();
   loadPortions();
   loadSuppliers();
   loadGuides();
@@ -1045,7 +1107,7 @@ async function reloadAll(){
   if(btn)btn.classList.add('spin');
   try{
     await Promise.all([
-      loadInventory(),loadRecipes(),loadMenus(),
+      loadInventory(),loadRecipes(),loadMenus(),loadCourses(),
       loadPortions(),loadSuppliers(),loadGuides(),loadHandovers(),loadReservations(),loadShifts(),loadChecks(),loadStaff()
     ]);
   }catch(e){console.error(e);}
@@ -1091,6 +1153,7 @@ function setupRealtime(){
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_logs'},loadInventory)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_recipes'},loadRecipes)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_menus'},loadMenus)
+    .on('postgres_changes',{event:'*',schema:'public',table:'inv_courses'},loadCourses)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_portions'},loadPortions)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_suppliers'},loadSuppliers)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_guides'},loadGuides)
@@ -1159,6 +1222,7 @@ function updateTabCounts(){
   setTabCount('cnt-stock',(typeof ingredients!=='undefined'?ingredients:[]).length);
   setTabCount('cnt-recipe',(typeof recipes!=='undefined'?recipes:[]).length);
   setTabCount('cnt-list',(typeof items!=='undefined'&&items?items:[]).length);
+  setTabCount('cnt-course',(typeof courses!=='undefined'?courses:[]).length);
   setTabCount('cnt-portion',(typeof portions!=='undefined'?portions:[]).length);
   setTabCount('cnt-supplier',(typeof suppliers!=='undefined'?suppliers:[]).length);
   setTabCount('cnt-guide',(typeof guides!=='undefined'?guides:[]).length);
@@ -1623,6 +1687,8 @@ async function loadMenus(){
     cacheMenu();
     setMConn('on','🟢 オンライン共有中（変更は全端末に反映されます）');
     render();
+    // メニューの原価が変わったらコースの原価率も追随させる
+    if(typeof courses!=='undefined'&&courses.length)renderCourses();
   }finally{
     menuBusy=false;
     if(menuPending){ menuPending=false; loadMenus(); } // 実行中に来た更新をまとめて1回だけ反映
@@ -1849,6 +1915,137 @@ async function deleteItem(){
   }else{items.splice(editIndex,1);cacheMenu();closeForm();render();}
 }
 function closeForm(){showPage('list');}
+
+/* ============================================================
+   コースメーカー（メニューを組み合わせて原価率をリアルタイム表示）
+   コースは inv_courses に保存＝全端末で共有。
+   原価はメニュー(inv_menus)の今の値から毎回計算するので、
+   メニューの原価を直せばコースの原価率も自動で変わる。
+   ============================================================ */
+let courses=[], courseEditId=null, draftCourse={items:[]};
+function setCrsConn(cls,text){const b=document.getElementById('crsConnBar');if(b){b.className='conn '+cls;b.textContent=text;}}
+function menuUnitCost(it){let c=0;(it.ings||[]).forEach(g=>c+=ingCost(g));return c;}
+async function loadCourses(){
+  if(!db)return;
+  const r=await db.from('inv_courses').select('*');
+  if(r.error){console.error(r.error);setCrsConn('err','コース表が未作成です（コース用SQLを実行してください）');return;}
+  courses=(r.data||[]).sort((a,b)=>((a.sort_order||0)-(b.sort_order||0))||String(a.created_at||'').localeCompare(String(b.created_at||'')));
+  setCrsConn('on','🟢 オンライン共有中（コースは全員で共有）');
+  renderCourses();
+}
+/* コース1件ぶんの計算（原価/原価率/単品合計/欠品数） */
+function courseCalc(c){
+  let cost=0,single=0,missing=0;const rows=[];
+  (Array.isArray(c.items)?c.items:[]).forEach(x=>{
+    const it=items.find(m=>m.id===x.id);
+    if(it){const uc=menuUnitCost(it);cost+=uc;single+=(+it.price||0);rows.push({name:it.menu,cost:uc,ok:true});}
+    else{missing++;rows.push({name:(x.menu||'？')+'（メニューから削除済み）',cost:0,ok:false});}
+  });
+  const price=+c.price||0;
+  return{cost,single,missing,rows,price,profit:price-cost,rate:price>0?cost/price*100:0};
+}
+function renderCourses(){
+  updateTabCounts();
+  const box=document.getElementById('courseList');if(!box)return;
+  document.getElementById('courseEmpty').style.display=courses.length?'none':'block';
+  box.innerHTML=courses.map(c=>{
+    const k=courseCalc(c);
+    const rows=k.rows.map(r=>`<div class="ci${r.ok?'':' miss'}"><span>${esc(r.name)}</span><b>${r.ok?yen(r.cost):'—'}</b></div>`).join('');
+    const otoku=Math.max(0,k.single-k.price);
+    return `<div class="crscard">
+      <div class="crs_top"><p class="crs_name">🍱 ${esc(c.name||'(名称なし)')}</p><span class="crs_price">${yen(k.price)}</span></div>
+      <div class="crs_items">${rows}</div>
+      <div class="result" style="margin-top:10px">
+        <div class="big ${k.profit<0?'neg':''}"><span>粗利（1名あたり）</span><b>${yen(k.profit)}</b></div>
+        <div class="kv"><span>合計原価（${k.rows.length}品）</span><b>${yen(k.cost)}</b></div>
+        <div class="kv"><span>原価率</span><b><span class="rate ${rateClass(k.rate)}">${k.rate.toFixed(1)}%</span></b></div>
+        <div class="kv"><span>単品で頼んだ場合</span><b>${yen(k.single)}${otoku?`（お得 ${yen(otoku)}）`:''}</b></div>
+      </div>
+      ${k.missing?`<div class="note" style="color:var(--red)">⚠ 削除されたメニューが${k.missing}品あります（原価0で計算中）。編集で入れ替えてください。</div>`:''}
+      <button class="btn sub" style="margin-top:10px" onclick="openCourseForm('${c.id}')">✏️ 編集する</button>
+    </div>`;
+  }).join('');
+}
+/* ---- 作成/編集フォーム ---- */
+function openCourseForm(id){
+  courseEditId=id||null;
+  const c=id?courses.find(x=>x.id===id):null;
+  document.getElementById('courseFormTitle').textContent=id?'コースを編集':'＋ コースを作る';
+  document.getElementById('courseDelBtn').classList.toggle('hide',!id);
+  draftCourse={items:(c&&Array.isArray(c.items))?JSON.parse(JSON.stringify(c.items)):[]};
+  cf_name.value=c?c.name:'';
+  cf_price.value=c?(+c.price||''):3000;
+  document.getElementById('cf_search').value='';
+  renderCourseForm();
+  showPage('courseform');
+}
+function renderCourseForm(){
+  // 選択済み（コースの中身）
+  const sel=document.getElementById('cf_selected');
+  sel.innerHTML=draftCourse.items.length?draftCourse.items.map((x,i)=>{
+    const it=items.find(m=>m.id===x.id);
+    const nm=it?it.menu:(x.menu||'？')+'（削除済み）';
+    const cost=it?menuUnitCost(it):0;
+    return `<div class="pickrow">
+      <span class="nm">${esc(nm)}<span class="sub2">原価 ${yen(cost)}</span></span>
+      <button class="rmv" onclick="removeCourseItem(${i})">✕ 外す</button>
+    </div>`;
+  }).join(''):'<div class="pickempty">まだ何も入っていません。下の一覧からタップで追加してください。</div>';
+  // 候補（メニュー一覧）
+  const q=normJa(document.getElementById('cf_search').value);
+  const cands=sortedItems().map(({it})=>it).filter(it=>it.id&&(!q||normJa(it.menu||'').includes(q)));
+  const inCount={};draftCourse.items.forEach(x=>{inCount[x.id]=(inCount[x.id]||0)+1;});
+  document.getElementById('cf_cands').innerHTML=cands.length?cands.map(it=>{
+    const uc=menuUnitCost(it);
+    const rate=(+it.price>0)?uc/(+it.price)*100:0;
+    return `<div class="pickrow">
+      <span class="nm">${esc(it.menu||'(名称なし)')}<span class="sub2">売価 ${yen(+it.price||0)} ／ 原価 ${yen(uc)}</span></span>
+      ${inCount[it.id]?`<span class="cnt2">${inCount[it.id]}品入り</span>`:''}
+      <span class="rate ${rateClass(rate)}">${rate.toFixed(0)}%</span>
+      <button onclick="addCourseItem('${it.id}')">＋</button>
+    </div>`;
+  }).join(''):'<div class="pickempty">一致するメニューがありません。</div>';
+  updateCourseBar();
+}
+function addCourseItem(id){
+  const it=items.find(m=>m.id===id);if(!it)return;
+  draftCourse.items.push({id:it.id,menu:it.menu});
+  renderCourseForm();
+}
+function removeCourseItem(i){draftCourse.items.splice(i,1);renderCourseForm();}
+/* 画面下のリアルタイム集計バー */
+function updateCourseBar(){
+  const bar=document.getElementById('crsBar');if(!bar)return;
+  const price=+cf_price.value||0;
+  let cost=0;
+  draftCourse.items.forEach(x=>{const it=items.find(m=>m.id===x.id);if(it)cost+=menuUnitCost(it);});
+  const rate=price>0?cost/price*100:0;
+  bar.innerHTML=`<span class="l">${draftCourse.items.length}品 ／ 原価 ${yen(cost)}<small>売価 ${yen(price)} → 粗利 ${yen(price-cost)}</small></span>
+    <span class="rate ${rateClass(rate)}">原価率 ${rate.toFixed(1)}%</span>`;
+}
+async function saveCourse(){
+  if(!db){alert('接続がありません');return;}
+  const name=cf_name.value.trim();
+  if(!name){alert('コース名を入れてください');return;}
+  if(!draftCourse.items.length){alert('メニューを1品以上えらんでください');return;}
+  const row={name,price:+cf_price.value||0,items:draftCourse.items,updated_at:new Date().toISOString()};
+  let res;
+  if(courseEditId){
+    res=await db.from('inv_courses').update(row).eq('id',courseEditId);
+  }else{
+    const maxo=courses.reduce((m,c)=>Math.max(m,c.sort_order||0),0);
+    res=await db.from('inv_courses').insert({...row,sort_order:maxo+10});
+  }
+  if(res.error){console.error(res.error);alert('保存に失敗しました。\nSupabaseでコース用SQL（inv_courses）を実行済みか確認してください。');return;}
+  showPage('course');loadCourses();
+}
+async function deleteCourse(){
+  if(!courseEditId||!db)return;
+  if(!confirmDelete('このコースを削除しますか？'))return;
+  const {error}=await db.from('inv_courses').delete().eq('id',courseEditId);
+  if(error){console.error(error);alert('削除に失敗しました');return;}
+  showPage('course');loadCourses();
+}
 
 /* ============================================================
    ポーション（小分け）＝Supabase共有
@@ -3267,6 +3464,9 @@ function showPage(p){
   document.getElementById('tab-stock').classList.toggle('hide',p!=='stock');
   document.getElementById('tab-recipe').classList.toggle('hide',p!=='recipe');
   document.getElementById('tab-list').classList.toggle('hide',p!=='list');
+  document.getElementById('tab-course').classList.toggle('hide',p!=='course');
+  document.getElementById('courseFormPage').classList.toggle('hide',p!=='courseform');
+  document.getElementById('crsBar').classList.toggle('show',p==='courseform');
   document.getElementById('tab-portion').classList.toggle('hide',p!=='portion');
   document.getElementById('tab-supplier').classList.toggle('hide',p!=='supplier');
   document.getElementById('tab-guide').classList.toggle('hide',p!=='guide');
@@ -3294,6 +3494,7 @@ function showPage(p){
   if(p==='stock'){fab.classList.remove('hide');fab.textContent='＋ 食材を登録';}
   else if(p==='recipe'){fab.classList.remove('hide');fab.textContent='＋ レシピを登録';}
   else if(p==='list'){fab.classList.remove('hide');fab.textContent='＋ メニューを追加';}
+  else if(p==='course'){fab.classList.remove('hide');fab.textContent='＋ コースを作る';}
   else if(p==='portion'){fab.classList.remove('hide');fab.textContent='＋ 小分けを登録';}
   else if(p==='supplier'){fab.classList.remove('hide');fab.textContent='＋ 取引先を登録';}
   else if(p==='guide'){
@@ -3318,6 +3519,7 @@ function fabAction(){
   if(currentTab==='stock')openIngForm();
   else if(currentTab==='recipe')openRecipeForm();
   else if(currentTab==='list')openForm();
+  else if(currentTab==='course')openCourseForm();
   else if(currentTab==='portion')openPortionForm();
   else if(currentTab==='supplier')openSupplierForm();
   else if(currentTab==='guide'){if(guideCat!=='garbage')openGuideForm();}
