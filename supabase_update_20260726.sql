@@ -81,4 +81,44 @@ begin
 end $$;
 
 -- ⑤ 設備清掃は追加のテーブル不要（inv_guides の category='machine' と inv_checks を使います）
+
+-- ⑥ スタッフ名簿（シフトの「＋出勤を追加」で名前を一覧から選べるように）
+--    読み取りは全員OK・追加/削除はオーナーのみ（予約・シフトと同じパスワード）
+create table if not exists inv_staff (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null default '',
+  created_at timestamptz not null default now()
+);
+alter table inv_staff enable row level security;
+do $$ begin
+  create policy "inv_staff_read" on inv_staff for select using (true);
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter publication supabase_realtime add table inv_staff;
+exception when duplicate_object then null; end $$;
+
+create or replace function stf_add(p_pass text, p_name text)
+returns uuid
+language plpgsql security definer set search_path = public as $$
+declare v_id uuid;
+begin
+  if p_pass is distinct from private.res_owner_pass() then
+    perform pg_sleep(1);
+    raise exception 'password_ng';
+  end if;
+  insert into inv_staff(name) values(coalesce(p_name,'')) returning id into v_id;
+  return v_id;
+end $$;
+
+create or replace function stf_delete(p_pass text, p_id uuid)
+returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if p_pass is distinct from private.res_owner_pass() then
+    perform pg_sleep(1);
+    raise exception 'password_ng';
+  end if;
+  delete from inv_staff where id=p_id;
+end $$;
+
 -- 完了。実行後にアプリを再読み込みしてください。

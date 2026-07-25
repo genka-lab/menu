@@ -358,6 +358,10 @@ textarea:focus{border-color:var(--blue);background:#fff}
 .sft_staffbar span{flex:0 0 auto}
 .sft_staffbar select{flex:1 1 auto;padding:9px 10px;font-size:15px;border-radius:10px;border:1.5px solid var(--line);background:#fff}
 .sft_staffbar.hide{display:none}
+/* スタッフ名簿 */
+.stfrow{display:flex;justify-content:space-between;align-items:center;background:#f8fafc;border:1px solid var(--line);
+  border-radius:10px;padding:10px 12px;margin-top:8px;font-weight:700}
+.stfrow button{padding:7px 12px;font-size:12px;font-weight:700;border-radius:8px;border:1.5px solid var(--red);background:#fff;color:var(--red)}
 /* シフト役割チップ */
 .sft_role{display:inline-block;font-size:11px;font-weight:800;padding:2px 9px;border-radius:999px;background:#eef1f5;color:var(--sub);margin-right:7px;vertical-align:2px;white-space:nowrap}
 /* ===== 赤いチェック通知バー（引き継ぎの黄色とは別・全部チェックするまで消えない） ===== */
@@ -721,6 +725,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
       <option value="">（日付で見る）</option>
     </select>
   </div>
+  <button id="sftStaffEditBtn" class="res_loginbtn hide" onclick="openStaffPage()">👥 スタッフ名簿を編集（出勤追加で名前を選べます）</button>
   <div class="segbar hide" id="sftRoleBar"></div>
   <div id="sftDateBar" class="res_datebar hide">
     <button onclick="sftShiftDate(-1)">◀</button>
@@ -745,7 +750,9 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <label>📅 日付</label>
     <input id="shf_date" type="date">
     <label>👤 名前</label>
+    <select id="shf_name_sel" class="hide" onchange="onShfNameSel()"></select>
     <input id="shf_name" placeholder="例：たなか">
+    <div class="note" id="shf_name_note">👥 「スタッフ名簿」に登録すると、ここで一覧から選べるようになります。</div>
     <label>役割（ホール／キッチンなど）</label>
     <select id="shf_role">
       <option value="">（なし）</option>
@@ -761,6 +768,19 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <button class="btn" onclick="saveShift()">保存する</button>
     <button class="btn sub" onclick="showPage('shift')">キャンセル</button>
     <button class="btn danger hide" id="sftDelBtn" onclick="deleteShift()">この出勤を削除</button>
+  </div>
+</div>
+
+<!-- ========== スタッフ名簿（オーナーのみ） ========== -->
+<div id="staffPage" class="wrap hide">
+  <div class="card">
+    <h2 class="sec">👥 スタッフ名簿</h2>
+    <div class="note">ここに登録した名前が「＋ 出勤を追加」で一覧から選べるようになります。</div>
+    <label>名前を追加</label>
+    <input id="stf_staffname" placeholder="例：たなか" onkeydown="if(event.key==='Enter')addStaff()">
+    <button class="btn" onclick="addStaff()">＋ 名簿に追加</button>
+    <div id="staffListBox" style="margin-top:14px"></div>
+    <button class="btn sub" onclick="showPage('shift')">← シフトにもどる</button>
   </div>
 </div>
 
@@ -1000,6 +1020,7 @@ function initDB(){
   loadReservations();
   loadShifts();
   loadChecks();
+  loadStaff();
   resWasOpen=resIsOpenNow(); // 起動直後に「16時になった」と誤判定しないように
   sftWasOpen=sftIsOpenNow();
   setupRealtime();
@@ -1013,7 +1034,7 @@ async function reloadAll(){
   try{
     await Promise.all([
       loadInventory(),loadRecipes(),loadMenus(),
-      loadPortions(),loadSuppliers(),loadGuides(),loadHandovers(),loadReservations(),loadShifts(),loadChecks()
+      loadPortions(),loadSuppliers(),loadGuides(),loadHandovers(),loadReservations(),loadShifts(),loadChecks(),loadStaff()
     ]);
   }catch(e){console.error(e);}
   finally{ if(btn)setTimeout(()=>btn.classList.remove('spin'),500); }
@@ -1066,6 +1087,7 @@ function setupRealtime(){
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_reservations'},loadReservations)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_shifts'},loadShifts)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_checks'},loadChecks)
+    .on('postgres_changes',{event:'*',schema:'public',table:'inv_staff'},loadStaff)
     .subscribe();
 }
 
@@ -2868,6 +2890,87 @@ function roleChip(role){
 }
 let sftRoleFilter='';
 function setSftRole(r){sftRoleFilter=r;renderShifts();}
+/* ---- スタッフ名簿（登録した名前を出勤追加のプルダウンに出す） ---- */
+let staffList=[];
+async function loadStaff(){
+  if(!db)return;
+  const r=await db.from('inv_staff').select('*');
+  if(r.error){console.error(r.error);staffList=[];return;} // 名簿の表が未作成でもアプリは動かす
+  staffList=(r.data||[]).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'ja'));
+  const pg=document.getElementById('staffPage');
+  if(pg&&!pg.classList.contains('hide'))renderStaffPage();
+}
+/* 名簿の名前＋過去のシフトで使った名前（名簿に無いもの）を合わせた候補 */
+function staffNamesAll(){
+  const names=staffList.map(s=>(s.name||'').trim()).filter(Boolean);
+  sftStaffNames().forEach(n=>{if(!names.includes(n))names.push(n);});
+  return names;
+}
+function openStaffPage(){
+  if(!sftIsOwner()){alert('名簿の編集はオーナー（栗原）のみです。');return;}
+  renderStaffPage();
+  showPage('staffpage');
+}
+function renderStaffPage(){
+  const box=document.getElementById('staffListBox');if(!box)return;
+  box.innerHTML=staffList.length
+    ?staffList.map(s=>`<div class="stfrow"><span>👤 ${esc(s.name)}</span><button onclick="deleteStaff('${s.id}')">削除</button></div>`).join('')
+    :'<div class="empty" style="padding:20px 10px">まだ名簿に登録がありません。<br>上の欄から名前を追加してください。</div>';
+}
+async function addStaff(){
+  if(!db||!sftIsOwner())return;
+  const inp=document.getElementById('stf_staffname');
+  const name=inp.value.trim();
+  if(!name){alert('名前を入れてください');return;}
+  if(staffList.some(s=>(s.name||'').trim()===name)){alert('その名前はもう名簿にあります');return;}
+  const r=await db.rpc('stf_add',{p_pass:sftOwnerPass,p_name:name});
+  if(r.error){
+    console.error(r.error);
+    alert(resIsPassErr(r.error)?'オーナーパスワードが変わっています。もう一度ログインしてください。'
+      :'追加に失敗しました。\nSupabaseで supabase_update_20260726.sql を実行済みか確認してください。');
+    return;
+  }
+  inp.value='';
+  loadStaff();
+}
+async function deleteStaff(id){
+  if(!db||!sftIsOwner())return;
+  const s=staffList.find(x=>x.id===id);
+  if(!confirm(`「${s?s.name:''}」を名簿から削除しますか？\n（登録済みのシフトはそのまま残ります）`))return;
+  const r=await db.rpc('stf_delete',{p_pass:sftOwnerPass,p_id:id});
+  if(r.error){console.error(r.error);alert('削除に失敗しました');return;}
+  loadStaff();
+}
+/* ---- 出勤フォームの名前欄（名簿があればプルダウン・無ければ手入力） ---- */
+function renderShfNameUI(cur){
+  const sel=document.getElementById('shf_name_sel'), inp=document.getElementById('shf_name'),
+        note=document.getElementById('shf_name_note');
+  cur=(cur||'').trim();
+  const names=staffNamesAll();
+  if(cur&&!names.includes(cur))names.unshift(cur); // 編集中の名前が名簿に無くても選べるように
+  if(!names.length){
+    sel.classList.add('hide');
+    inp.classList.remove('hide');inp.value=cur;
+    note.style.display='block';
+    return;
+  }
+  sel.classList.remove('hide');
+  sel.innerHTML=`<option value="">（名前を選んでください）</option>`+
+    names.map(n=>`<option value="${escA(n)}"${n===cur?' selected':''}>${esc(n)}</option>`).join('')+
+    `<option value="__free">✏️（名簿にない名前を入力する）</option>`;
+  inp.classList.toggle('hide',true);inp.value=cur;
+  note.style.display='none';
+}
+function onShfNameSel(){
+  const sel=document.getElementById('shf_name_sel'), inp=document.getElementById('shf_name');
+  if(sel.value==='__free'){inp.classList.remove('hide');inp.value='';inp.focus();}
+  else inp.classList.add('hide');
+}
+function shfNameValue(){
+  const sel=document.getElementById('shf_name_sel');
+  if(!sel.classList.contains('hide')&&sel.value!=='__free')return sel.value.trim();
+  return document.getElementById('shf_name').value.trim();
+}
 function renderShifts(){
   updateTabCounts();
   const owner=sftIsOwner();
@@ -2876,6 +2979,7 @@ function renderShifts(){
   // スタッフ絞り込み（オーナーのみ）。選択を保ったまま選択肢を作り直す
   const staffBar=document.getElementById('sftStaffBar');
   staffBar.classList.toggle('hide',!owner);
+  document.getElementById('sftStaffEditBtn').classList.toggle('hide',!owner);
   const sel=document.getElementById('sftStaffFilter');
   if(owner){
     const cur=sel.value;
@@ -2992,7 +3096,7 @@ function openShiftForm(id){
   document.getElementById('sftDelBtn').classList.toggle('hide',!id);
   const s=id?shifts.find(x=>x.id===id):null;
   shf_date.value=s?s.work_on:(document.getElementById('sft_date').value||todayStr());
-  shf_name.value=s?s.staff_name:'';
+  renderShfNameUI(s?s.staff_name:'');
   shf_role.value=s?(s.role||''):'';
   shf_start.value=s?(s.start_at||'').slice(0,5):'';
   shf_end.value=s?(s.end_at||'').slice(0,5):'';
@@ -3003,11 +3107,12 @@ async function saveShift(){
   if(!db){alert('接続がありません');return;}
   if(!sftIsOwner()){alert('シフトの登録はオーナー（栗原）のみです。');return;}
   if(!shf_date.value){alert('日付を入れてください');return;}
-  if(!shf_name.value.trim()){alert('名前を入れてください');return;}
+  const staffName=shfNameValue();
+  if(!staffName){alert('名前を選ぶか入れてください');return;}
   showSaving(true);
   const r=await db.rpc('sft_save',{
     p_pass:sftOwnerPass, p_id:sftEditId, p_on:shf_date.value,
-    p_name:shf_name.value.trim(), p_start:shf_start.value||'', p_end:shf_end.value||'',
+    p_name:staffName, p_start:shf_start.value||'', p_end:shf_end.value||'',
     p_note:shf_note.value.trim(), p_role:shf_role.value||''
   });
   showSaving(false);
@@ -3058,6 +3163,7 @@ function showPage(p){
   document.getElementById('resFormPage').classList.toggle('hide',p!=='resform');
   document.getElementById('tab-shift').classList.toggle('hide',p!=='shift');
   document.getElementById('shiftFormPage').classList.toggle('hide',p!=='shiftform');
+  document.getElementById('staffPage').classList.toggle('hide',p!=='staffpage');
   document.getElementById('tab-calc').classList.toggle('hide',p!=='calc');
   document.getElementById('formPage').classList.toggle('hide',p!=='form');
   document.getElementById('ingFormPage').classList.toggle('hide',p!=='ingform');
