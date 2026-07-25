@@ -897,6 +897,13 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <input id="gf_title" placeholder="例：トイレ掃除／レジ開け／接客の注意点">
     <label>内容・手順・注意事項（改行OK）</label>
     <textarea id="gf_body" placeholder="例：&#10;・便器→床→鏡の順でふく&#10;・終わったらチェック表にサイン"></textarea>
+    <div id="gf_cyclewrap" class="hide">
+      <label>⏰ 清掃サイクル（この設備のアラートが出る日）</label>
+      <select id="gf_cycle">
+        <option value="weekly">毎週 日曜日（日曜が祝日なら振替の月曜日）</option>
+        <option value="monthly">毎月 中頃の日曜日（12〜18日の日曜・祝日なら振替の月曜日）</option>
+      </select>
+    </div>
     <label>写真つき解説（写真なしの解説だけでもOK・何個でも追加できます）</label>
     <div id="gf_blocks"></div>
     <button class="btn add" onclick="addGuideBlock()">＋ 解説ブロックを追加（写真は任意）</button>
@@ -2104,7 +2111,7 @@ function renderGuide(){
     .sort((a,b)=>((a.sort_order||0)-(b.sort_order||0))||String(a.title||'').localeCompare(String(b.title||''),'ja'));
   if(!list.length){
     body.innerHTML=guideCat==='machine'
-      ?'<div class="empty">まだ設備が登録されていません。<br>下の「＋ 登録」からビールサーバー・フライヤーなどの清掃方法を追加してください。<br><br>⏰ 登録すると毎週日曜日（日曜日が祝日のときは振替の月曜日）に<br>「本日清掃ですよ！」の赤い通知が出ます。</div>'
+      ?'<div class="empty">まだ設備が登録されていません。<br>下の「＋ 登録」からビールサーバー・フライヤーなどの清掃方法を追加してください。<br><br>⏰ 清掃サイクルは設備ごとに「毎週日曜」か「毎月中頃の日曜」を選べます。<br>当日になると「本日清掃ですよ！」の赤い通知が出ます（祝日は振替の月曜日）。</div>'
       :'<div class="empty">まだ登録がありません。<br>下の「＋ 登録」から追加してください。</div>';
     return;
   }
@@ -2122,13 +2129,13 @@ function renderGuide(){
     // 設備清掃：清掃日だけ「清掃終了」ボタンを出す
     let mc='';
     if(g.category==='machine'){
-      if(isCleaningDay()){
+      if(isMachineCleaningDay(g)){
         const c=findCheck('machine:'+g.id,0);
         mc=c?`<div class="mcinfo">✔ 本日の清掃おわり（${esc(c.who||'誰か')}さん）</div>
               <button class="g_edit" onclick="machineUndo('${g.id}')">↩ 未清掃に戻す</button>`
             :`<button class="mcdone" onclick="machineDone('${g.id}')">🚨 本日清掃ですよ！ 清掃したらここを押す（終了）</button>`;
       }else{
-        mc=`<div class="mcnote">⏰ 毎週日曜日（日曜日が祝日のときは振替の月曜日）に「本日清掃ですよ！」の赤い通知が出ます</div>`;
+        mc=`<div class="mcnote">⏰ ${machineCycleLabel(g)}に「本日清掃ですよ！」の赤い通知が出ます</div>`;
       }
     }
     return `<div class="gcard">
@@ -2172,6 +2179,8 @@ function openGuideForm(id){
   const g=id?guides.find(x=>x.id===id):null;
   gf_title.value=g?g.title:'';
   gf_body.value=g?g.body:'';
+  document.getElementById('gf_cyclewrap').classList.toggle('hide',guideCat!=='machine');
+  document.getElementById('gf_cycle').value=g?machineCycleOf(g):'weekly';
   draftGuide={
     photos:(g&&Array.isArray(g.photos)?g.photos:[]).map(p=>({url:p.url||'',caption:p.caption||'',blob:null,preview:''})),
     checklist:(g&&Array.isArray(g.checklist)?g.checklist.slice():[])
@@ -2222,6 +2231,7 @@ async function saveGuide(){
   showSaving(true);
   try{
     const base={category:guideCat,title,body:gf_body.value.trim(),
+      cycle:(guideCat==='machine'?(document.getElementById('gf_cycle').value||'weekly'):'weekly'),
       checklist:draftGuide.checklist.map(s=>String(s||'').trim()).filter(Boolean)};
     let id=guideEditId;
     if(!id){
@@ -2365,6 +2375,21 @@ function isCleaningDay(){
   if(t.getDay()===1){const y=new Date(t);y.setDate(y.getDate()-1);return jpHoliday(y);}
   return false;
 }
+/* 設備ごとの清掃サイクル: weekly=毎週日曜 / monthly=毎月中頃(12〜18日)の日曜 */
+function machineCycleOf(g){return g.cycle==='monthly'?'monthly':'weekly';}
+function isMidMonth(d){return d.getDate()>=12&&d.getDate()<=18;} // 12〜18日の窓に日曜は必ず1回だけ入る
+function isMachineCleaningDay(g){
+  if(machineCycleOf(g)==='weekly')return isCleaningDay();
+  const t=new Date(todayStr()+'T00:00:00');
+  if(t.getDay()===0)return isMidMonth(t)&&!jpHoliday(t);
+  if(t.getDay()===1){const y=new Date(t);y.setDate(y.getDate()-1);return isMidMonth(y)&&jpHoliday(y);}
+  return false;
+}
+function machineCycleLabel(g){
+  return machineCycleOf(g)==='monthly'
+    ?'毎月中頃の日曜日（12〜18日の日曜・祝日のときは振替の月曜日）'
+    :'毎週日曜日（日曜日が祝日のときは振替の月曜日）';
+}
 /* ---- 未完了の集計と赤バー ---- */
 function pendingCheckInfo(){
   const out={cats:{},total:0,machine:[]};
@@ -2376,11 +2401,9 @@ function pendingCheckInfo(){
       });
     }
   });
-  if(isCleaningDay()){
-    gs.filter(g=>g.category==='machine').forEach(g=>{
-      if(!findCheck('machine:'+g.id,0))out.machine.push(g.title||'設備');
-    });
-  }
+  gs.filter(g=>g.category==='machine').forEach(g=>{
+    if(isMachineCleaningDay(g)&&!findCheck('machine:'+g.id,0))out.machine.push(g.title||'設備');
+  });
   const dow=new Date(todayStr()+'T00:00:00').getDay();
   const gb=(typeof garbage!=='undefined'?garbage:[]).find(x=>+x.day===dow);
   if(gb&&Array.isArray(gb.checklist)){

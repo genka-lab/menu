@@ -20,6 +20,11 @@ alter table inv_portions add column if not exists photos jsonb not null default 
 alter table inv_guides  add column if not exists checklist jsonb not null default '[]'::jsonb;
 alter table inv_garbage add column if not exists checklist jsonb not null default '[]'::jsonb;
 
+-- (3)+ machine cleaning cycle per equipment:
+--      'weekly'  = every Sunday (Mon if the Sunday is a holiday)
+--      'monthly' = mid-month Sunday (the Sunday between the 12th and 18th)
+alter table inv_guides add column if not exists cycle text not null default 'weekly';
+
 -- (3)' shared check table: who checked what, per day (shared by all devices)
 --      source: guide:<id> / garbage:<0-6 weekday> / machine:<id>
 create table if not exists inv_checks (
