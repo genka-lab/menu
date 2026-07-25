@@ -422,6 +422,11 @@ textarea:focus{border-color:var(--blue);background:#fff}
 .pickrow .cnt2{flex:0 0 auto;font-size:11px;font-weight:800;color:#fff;background:var(--orange);
   border-radius:999px;padding:2px 8px;white-space:nowrap}
 .pickempty{padding:14px 4px;font-size:13px;color:var(--sub)}
+.pickcard{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:9px 11px;margin-top:8px}
+.svrow{display:flex;gap:6px;flex-wrap:wrap}
+.svrow select{flex:1 1 45%;padding:9px 8px;font-size:13px;background:#fff}
+.svchip{display:inline-block;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;background:#eef1f5;color:var(--sub);margin-left:5px;white-space:nowrap;vertical-align:1px}
+.svchip.on{background:#e2efda;color:var(--green)}
 /* コース編集中の画面下・集計バー */
 .crsbar{position:fixed;left:14px;right:14px;bottom:16px;z-index:31;background:var(--navy);color:#fff;
   border-radius:14px;padding:11px 16px;box-shadow:0 4px 14px rgba(31,59,87,.45);
@@ -646,9 +651,13 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <label>コース名</label>
     <input id="cf_name" placeholder="例：3,000円 定番コース">
     <label>コース売価（税込・円）</label>
-    <input id="cf_price" type="number" inputmode="decimal" placeholder="3000" oninput="updateCourseBar()">
+    <input id="cf_price" type="number" inputmode="decimal" placeholder="3000" oninput="renderCourseForm()">
     <h2 class="sec" style="margin-top:18px">🍱 コースの中身（✕で外す）</h2>
+    <div class="note" style="margin:-6px 0 8px">品ごとに「出し方」を選べます。<b>大皿シェア／卓に1つ</b>にすると、人数が多いほど原価率が下がります。</div>
+    <label>👥 シミュレーション人数（下の原価バーの計算人数）</label>
+    <div class="segbar" id="cf_simn" style="margin-bottom:4px"></div>
     <div id="cf_selected"></div>
+    <div id="cf_simtable"></div>
     <h2 class="sec" style="margin-top:18px">＋ メニューから追加</h2>
     <input id="cf_search" placeholder="🔍 メニュー名で検索（一部だけでOK）" oninput="renderCourseForm()">
     <div id="cf_cands"></div>
@@ -1933,35 +1942,56 @@ async function loadCourses(){
   setCrsConn('on','🟢 オンライン共有中（コースは全員で共有）');
   renderCourses();
 }
-/* コース1件ぶんの計算（原価/原価率/単品合計/欠品数） */
-function courseCalc(c){
-  let cost=0,single=0,missing=0;const rows=[];
+/* ---- 品ごとの「出し方」 ----
+   each  = 各自1人前（×人数。人数が増えても原価率は同じ）
+   share = 大皿シェア（1人あたり◯人前で量を調整。人数が増えるほど原価率が下がる）
+   fixed = 卓に1つ（人数に関係なく固定。大人数ほど原価率が下がる） */
+const SV_LABEL={each:'各自',share:'シェア',fixed:'卓1'};
+function courseItemPortions(x,n){
+  const sv=x.sv||'each';
+  if(sv==='fixed')return Math.max(0.5,+x.fix||1);
+  if(sv==='share'){const r=+x.ratio||0.7;return Math.max(1,Math.ceil(n*r*2)/2);} // 0.5人前きざみ・最低1人前
+  return n;
+}
+/* コース1件ぶんの計算（n人ぶんの原価/売上/原価率） */
+function courseCalc(c,n){
+  n=n||2;
+  let cost=0,missing=0;const rows=[];
   (Array.isArray(c.items)?c.items:[]).forEach(x=>{
     const it=items.find(m=>m.id===x.id);
-    if(it){const uc=menuUnitCost(it);cost+=uc;single+=(+it.price||0);rows.push({name:it.menu,cost:uc,ok:true});}
-    else{missing++;rows.push({name:(x.menu||'？')+'（メニューから削除済み）',cost:0,ok:false});}
+    const p=courseItemPortions(x,n);
+    if(it){const uc=menuUnitCost(it);cost+=uc*p;rows.push({name:it.menu,unit:uc,portions:p,sv:x.sv||'each',ratio:+x.ratio||0.7,ok:true});}
+    else{missing++;rows.push({name:(x.menu||'？')+'（メニューから削除済み）',unit:0,portions:p,sv:x.sv||'each',ratio:+x.ratio||0.7,ok:false});}
   });
-  const price=+c.price||0;
-  return{cost,single,missing,rows,price,profit:price-cost,rate:price>0?cost/price*100:0};
+  const price=+c.price||0, rev=price*n;
+  return{cost,missing,rows,price,rev,profit:rev-cost,rate:rev>0?cost/rev*100:0};
+}
+/* 人数別シミュレーション表（2/3/4/6/8人） */
+const CRS_SIM_NS=[2,3,4,6,8];
+function courseSimTableHTML(calcFn,price){
+  return `<table><tr><th>人数</th><th>売上</th><th>原価</th><th>粗利</th><th>原価率</th></tr>`+
+    CRS_SIM_NS.map(n=>{
+      const k=calcFn(n);
+      return `<tr><td>${n}人</td><td class="price">${yen(price*n)}</td><td>${yen(k.cost)}</td><td class="${(price*n-k.cost)<0?'neg':''}">${yen(price*n-k.cost)}</td><td><span class="rate ${rateClass(k.rate)}">${k.rate.toFixed(1)}%</span></td></tr>`;
+    }).join('')+`</table>`;
+}
+function svChip(r){
+  const t=r.sv==='share'?`シェア ${r.ratio}人前/人`:r.sv==='fixed'?'卓に1つ':'各自1人前';
+  return `<span class="svchip${r.sv==='each'?'':' on'}">${t}</span>`;
 }
 function renderCourses(){
   updateTabCounts();
   const box=document.getElementById('courseList');if(!box)return;
   document.getElementById('courseEmpty').style.display=courses.length?'none':'block';
   box.innerHTML=courses.map(c=>{
-    const k=courseCalc(c);
-    const rows=k.rows.map(r=>`<div class="ci${r.ok?'':' miss'}"><span>${esc(r.name)}</span><b>${r.ok?yen(r.cost):'—'}</b></div>`).join('');
-    const otoku=Math.max(0,k.single-k.price);
+    const k2=courseCalc(c,2);
+    const rows=k2.rows.map(r=>`<div class="ci${r.ok?'':' miss'}"><span>${esc(r.name)} ${svChip(r)}</span><b>${r.ok?yen(r.unit):'—'}</b></div>`).join('');
     return `<div class="crscard">
-      <div class="crs_top"><p class="crs_name">🍱 ${esc(c.name||'(名称なし)')}</p><span class="crs_price">${yen(k.price)}</span></div>
+      <div class="crs_top"><p class="crs_name">🍱 ${esc(c.name||'(名称なし)')}</p><span class="crs_price">${yen(k2.price)}<span style="font-size:12px;color:var(--sub)">／1名</span></span></div>
       <div class="crs_items">${rows}</div>
-      <div class="result" style="margin-top:10px">
-        <div class="big ${k.profit<0?'neg':''}"><span>粗利（1名あたり）</span><b>${yen(k.profit)}</b></div>
-        <div class="kv"><span>合計原価（${k.rows.length}品）</span><b>${yen(k.cost)}</b></div>
-        <div class="kv"><span>原価率</span><b><span class="rate ${rateClass(k.rate)}">${k.rate.toFixed(1)}%</span></b></div>
-        <div class="kv"><span>単品で頼んだ場合</span><b>${yen(k.single)}${otoku?`（お得 ${yen(otoku)}）`:''}</b></div>
-      </div>
-      ${k.missing?`<div class="note" style="color:var(--red)">⚠ 削除されたメニューが${k.missing}品あります（原価0で計算中）。編集で入れ替えてください。</div>`:''}
+      <div class="note" style="margin-top:6px">※右の金額は1人前あたりの原価。人数ごとの合計は下の表。</div>
+      ${courseSimTableHTML(n=>courseCalc(c,n),k2.price)}
+      ${k2.missing?`<div class="note" style="color:var(--red)">⚠ 削除されたメニューが${k2.missing}品あります（原価0で計算中）。編集で入れ替えてください。</div>`:''}
       <button class="btn sub" style="margin-top:10px" onclick="openCourseForm('${c.id}')">✏️ 編集する</button>
     </div>`;
   }).join('');
@@ -1979,18 +2009,43 @@ function openCourseForm(id){
   renderCourseForm();
   showPage('courseform');
 }
+let crsSimN=2; // シミュレーション人数（コースは2人から）
+function setCrsSimN(n){crsSimN=n;renderCourseForm();}
 function renderCourseForm(){
+  // 人数切り替え
+  document.getElementById('cf_simn').innerHTML=CRS_SIM_NS.map(n=>
+    `<button class="${crsSimN===n?'on':''}" onclick="setCrsSimN(${n})">${n}人</button>`).join('');
   // 選択済み（コースの中身）
   const sel=document.getElementById('cf_selected');
   sel.innerHTML=draftCourse.items.length?draftCourse.items.map((x,i)=>{
     const it=items.find(m=>m.id===x.id);
     const nm=it?it.menu:(x.menu||'？')+'（削除済み）';
-    const cost=it?menuUnitCost(it):0;
-    return `<div class="pickrow">
-      <span class="nm">${esc(nm)}<span class="sub2">原価 ${yen(cost)}</span></span>
-      <button class="rmv" onclick="removeCourseItem(${i})">✕ 外す</button>
+    const uc=it?menuUnitCost(it):0;
+    const sv=x.sv||'each';
+    const p=courseItemPortions(x,crsSimN);
+    const svSel=`<select onchange="setCourseItemSv(${i},this.value)">
+        <option value="each"${sv==='each'?' selected':''}>各自1人前（×人数）</option>
+        <option value="share"${sv==='share'?' selected':''}>大皿シェア（量を調整）</option>
+        <option value="fixed"${sv==='fixed'?' selected':''}>卓に1つ（人数に関係なし）</option>
+      </select>`;
+    const ratioSel=sv==='share'?`<select onchange="setCourseItemRatio(${i},this.value)">
+        ${[0.5,0.6,0.7,0.8,1].map(r=>`<option value="${r}"${(+x.ratio||0.7)===r?' selected':''}>1人あたり${r}人前</option>`).join('')}
+      </select>`:'';
+    const fixSel=sv==='fixed'?`<select onchange="setCourseItemFix(${i},this.value)">
+        ${[1,1.5,2,3].map(f=>`<option value="${f}"${(+x.fix||1)===f?' selected':''}>${f}人前ぶん</option>`).join('')}
+      </select>`:'';
+    return `<div class="pickcard">
+      <div class="pickrow" style="border-bottom:none;padding:0 0 4px">
+        <span class="nm">${esc(nm)}<span class="sub2">1人前原価 ${yen(uc)} ／ ${crsSimN}人だと ${p}人前 = ${yen(uc*p)}</span></span>
+        <button class="rmv" onclick="removeCourseItem(${i})">✕</button>
+      </div>
+      <div class="svrow">${svSel}${ratioSel}${fixSel}</div>
     </div>`;
   }).join(''):'<div class="pickempty">まだ何も入っていません。下の一覧からタップで追加してください。</div>';
+  // 人数別シミュレーション表
+  document.getElementById('cf_simtable').innerHTML=draftCourse.items.length
+    ?courseSimTableHTML(n=>courseCalc({price:+cf_price.value||0,items:draftCourse.items},n),+cf_price.value||0)
+    :'';
   // 候補（メニュー一覧）
   const q=normJa(document.getElementById('cf_search').value);
   const cands=sortedItems().map(({it})=>it).filter(it=>it.id&&(!q||normJa(it.menu||'').includes(q)));
@@ -2009,19 +2064,20 @@ function renderCourseForm(){
 }
 function addCourseItem(id){
   const it=items.find(m=>m.id===id);if(!it)return;
-  draftCourse.items.push({id:it.id,menu:it.menu});
+  draftCourse.items.push({id:it.id,menu:it.menu,sv:'each',ratio:0.7,fix:1});
   renderCourseForm();
 }
 function removeCourseItem(i){draftCourse.items.splice(i,1);renderCourseForm();}
-/* 画面下のリアルタイム集計バー */
+function setCourseItemSv(i,v){if(draftCourse.items[i]){draftCourse.items[i].sv=v;renderCourseForm();}}
+function setCourseItemRatio(i,v){if(draftCourse.items[i]){draftCourse.items[i].ratio=+v||0.7;renderCourseForm();}}
+function setCourseItemFix(i,v){if(draftCourse.items[i]){draftCourse.items[i].fix=+v||1;renderCourseForm();}}
+/* 画面下のリアルタイム集計バー（シミュレーション人数ぶんで計算） */
 function updateCourseBar(){
   const bar=document.getElementById('crsBar');if(!bar)return;
   const price=+cf_price.value||0;
-  let cost=0;
-  draftCourse.items.forEach(x=>{const it=items.find(m=>m.id===x.id);if(it)cost+=menuUnitCost(it);});
-  const rate=price>0?cost/price*100:0;
-  bar.innerHTML=`<span class="l">${draftCourse.items.length}品 ／ 原価 ${yen(cost)}<small>売価 ${yen(price)} → 粗利 ${yen(price-cost)}</small></span>
-    <span class="rate ${rateClass(rate)}">原価率 ${rate.toFixed(1)}%</span>`;
+  const k=courseCalc({price,items:draftCourse.items},crsSimN);
+  bar.innerHTML=`<span class="l">${crsSimN}人予約: ${draftCourse.items.length}品 ／ 原価 ${yen(k.cost)}<small>売上 ${yen(k.rev)} → 粗利 ${yen(k.profit)}</small></span>
+    <span class="rate ${rateClass(k.rate)}">原価率 ${k.rate.toFixed(1)}%</span>`;
 }
 async function saveCourse(){
   if(!db){alert('接続がありません');return;}
