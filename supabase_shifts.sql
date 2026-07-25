@@ -22,10 +22,14 @@ create table if not exists inv_shifts (
   staff_name text        not null default '',      -- who works
   start_at   text        not null default '',      -- from what time, e.g. 17:00
   end_at     text        not null default '',      -- until (optional)
-  note       text        not null default '',      -- free memo (optional, e.g. ホール/キッチン)
+  note       text        not null default '',      -- free memo (optional)
+  role       text        not null default '',      -- 役割 (ホール/キッチン/カウンター etc.)
   updated_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
+
+-- 既存テーブルに後から役割列を足す場合もこの1行でOK（何度実行しても安全）
+alter table inv_shifts add column if not exists role text not null default '';
 
 create index if not exists inv_shifts_on_idx on inv_shifts(work_on);
 
@@ -68,6 +72,7 @@ end $$;
 -- ------------------------------------------------------------
 -- Owner: add (p_id null) or edit (p_id given) a shift
 -- ------------------------------------------------------------
+drop function if exists sft_save(text,uuid,date,text,text,text,text);
 create or replace function sft_save(
   p_pass  text,
   p_id    uuid,
@@ -75,7 +80,8 @@ create or replace function sft_save(
   p_name  text,
   p_start text,
   p_end   text,
-  p_note  text
+  p_note  text,
+  p_role  text
 ) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare v_id uuid;
@@ -88,13 +94,13 @@ begin
     raise exception 'date_required';
   end if;
   if p_id is null then
-    insert into inv_shifts(work_on,staff_name,start_at,end_at,note)
-    values(p_on,coalesce(p_name,''),coalesce(p_start,''),coalesce(p_end,''),coalesce(p_note,''))
+    insert into inv_shifts(work_on,staff_name,start_at,end_at,note,role)
+    values(p_on,coalesce(p_name,''),coalesce(p_start,''),coalesce(p_end,''),coalesce(p_note,''),coalesce(p_role,''))
     returning id into v_id;
   else
     update inv_shifts set
       work_on=p_on, staff_name=coalesce(p_name,''), start_at=coalesce(p_start,''),
-      end_at=coalesce(p_end,''), note=coalesce(p_note,''), updated_at=now()
+      end_at=coalesce(p_end,''), note=coalesce(p_note,''), role=coalesce(p_role,''), updated_at=now()
     where id=p_id
     returning id into v_id;
   end if;
