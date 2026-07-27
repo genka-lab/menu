@@ -377,6 +377,12 @@ textarea:focus{border-color:var(--blue);background:#fff}
 .checkbar.show{display:block}
 .checkbar .nb_go{float:right;font-size:12px;background:rgba(255,255,255,.22);padding:2px 9px;border-radius:999px;margin-left:8px}
 @keyframes checkpulse{0%,100%{background-color:#c0392b}50%{background-color:#e04a36}}
+/* ===== おしぼり通知バー（毎週月・金の21時〜。他の通知と区別する青色） ===== */
+.oshibar{display:none;margin:0;padding:11px 14px;background:#1e6fd9;border-bottom:2px solid #154f9c;color:#fff;
+  font-size:13.5px;font-weight:700;line-height:1.5;box-shadow:0 3px 8px rgba(0,0,0,.08);cursor:pointer;animation:oshipulse 2s ease-in-out infinite}
+.oshibar.show{display:block}
+.oshibar .nb_go{float:right;font-size:12px;background:rgba(255,255,255,.22);padding:2px 9px;border-radius:999px;margin-left:8px}
+@keyframes oshipulse{0%,100%{background-color:#1e6fd9}50%{background-color:#3b8bef}}
 /* チェック項目エディタ（フォーム内） */
 .chkwrap{background:#fff7f6;border:1.5px dashed #e8a79e;border-radius:12px;padding:10px 12px;margin-top:14px}
 .chkwrap .cw_ttl{font-size:13px;font-weight:800;color:var(--red)}
@@ -484,6 +490,8 @@ textarea:focus{border-color:var(--blue);background:#fff}
 <div id="notifyBar" class="notifybar" onclick="goHandover()"></div>
 <!-- ========== 赤いチェック通知バー（チェック未完了・設備清掃の日。全部終わるまで消えない） ========== -->
 <div id="checkBar" class="checkbar" onclick="goCheck()"></div>
+<!-- ========== おしぼり通知バー（毎週月・金の21時〜。「出しました」を押すまで消えない） ========== -->
+<div id="oshiboriBar" class="oshibar" onclick="oshiboriDone()"></div>
 </div><!-- /topbar -->
 
 <!-- ========== 在庫管理 ========== -->
@@ -1107,6 +1115,7 @@ function initDB(){
   loadShifts();
   loadChecks();
   loadStaff();
+  renderOshiboriBar(); // 接続に関係なく起動時に時刻判定（オフラインでも月金21時は出す）
   resWasOpen=resIsOpenNow(); // 起動直後に「16時になった」と誤判定しないように
   sftWasOpen=sftIsOpenNow();
   setupRealtime();
@@ -2022,11 +2031,20 @@ function renderCourses(){
   document.getElementById('courseEmpty').style.display=courses.length?'none':'block';
   box.innerHTML=courses.map(c=>{
     const k2=courseCalc(c,2);
-    const rows=k2.rows.map(r=>`<div class="ci${r.ok?'':' miss'}"><span>${esc(r.name)} ${svChip(r)}</span><b>${r.ok?`${yen(r.unit)}${r.unitG>0?`<span class="cig">約${Math.round(r.unitG)}g</span>`:''}`:'—'}</b></div>`).join('');
+    const rows=k2.rows.map(r=>{
+      // 量の表示: 各自=1人前がそのまま1人分。シェア/卓1は「1人前の量」と「1人あたりの量(2人時)」を併記
+      let gtxt='';
+      if(r.unitG>0){
+        const pp=Math.round(r.unitG*r.portions/2);
+        gtxt=r.sv==='each'?`<span class="cig">約${Math.round(r.unitG)}g</span>`
+                          :`<span class="cig">1人前${Math.round(r.unitG)}g→1人 約${pp}g</span>`;
+      }
+      return `<div class="ci${r.ok?'':' miss'}"><span>${esc(r.name)} ${svChip(r)}</span><b>${r.ok?`${yen(r.unit)}${gtxt}`:'—'}</b></div>`;
+    }).join('');
     return `<div class="crscard">
       <div class="crs_top"><p class="crs_name">🍱 ${esc(c.name||'(名称なし)')}</p><span class="crs_price">${yen(k2.price)}<span style="font-size:12px;color:var(--sub)">／1名</span></span></div>
       <div class="crs_items">${rows}</div>
-      <div class="note" style="margin-top:6px">※右の金額・量は1人前あたり。人数ごとの合計は下の表。</div>
+      <div class="note" style="margin-top:6px">※右の金額は1人前あたりの原価。シェア/卓1の品は「1人あたりの量(2人予約時)」も表示。人数ごとの合計は下の表。</div>
       ${courseVolHTML(k2,2)}
       ${courseSimTableHTML(n=>courseCalc(c,n),k2.price)}
       ${k2.missing?`<div class="note" style="color:var(--red)">⚠ 削除されたメニューが${k2.missing}品あります（原価0で計算中）。編集で入れ替えてください。</div>`:''}
@@ -2613,9 +2631,10 @@ async function loadChecks(){
   if(!db)return;
   checksDate=todayStr();
   const r=await db.from('inv_checks').select('*').eq('check_on',checksDate);
-  if(r.error){console.error(r.error);checks=[];renderCheckBar();return;} // 表が未作成でもアプリは動かす
+  if(r.error){console.error(r.error);checks=[];renderCheckBar();renderOshiboriBar();return;} // 表が未作成でもアプリは動かす
   checks=r.data||[];
   renderCheckBar();
+  renderOshiboriBar();
   if(currentTab==='guide')renderGuide();
 }
 function findCheck(source,idx){return checks.find(c=>c.source===source&&+c.item_idx===+idx);}
@@ -2746,6 +2765,28 @@ async function machineUndo(id){
   if(error){console.error(error);alert('更新に失敗しました');return;}
   loadChecks();
 }
+/* ---- おしぼり通知（毎週月曜・金曜の21時〜） ----
+   「✔出しました」を押すまで全タブで青バーが出続ける。
+   記録はinv_checks共有（source='oshibori'）＝全端末で消える・日付が変わると自動リセット */
+const OSHIBORI_DAYS=[1,5], OSHIBORI_HOUR=21; // 1=月曜,5=金曜
+function isOshiboriTime(){const d=new Date();return OSHIBORI_DAYS.includes(d.getDay())&&d.getHours()>=OSHIBORI_HOUR;}
+function renderOshiboriBar(){
+  const bar=document.getElementById('oshiboriBar');if(!bar)return;
+  if(!isOshiboriTime()||findCheck('oshibori',0)){bar.className='oshibar';bar.innerHTML='';return;}
+  bar.className='oshibar show';
+  bar.innerHTML=`♨️ おしぼりを出してください！<span class="nb_go">✔ 出しました</span>`;
+}
+async function oshiboriDone(){
+  if(!db){alert('接続がありません');return;}
+  if(findCheck('oshibori',0)){loadChecks();return;}
+  let who=getOperator();
+  if(!who){who=(prompt('出した人のお名前を入れてください：')||'').trim();if(!who)return;setOperator(who);}
+  const {error}=await db.from('inv_checks').insert({
+    check_on:todayStr(),source:'oshibori',item_idx:0,label:'おしぼりを出す',who});
+  if(error){console.error(error);alert('記録に失敗しました。\nSupabaseで supabase_update_20260726.sql を実行済みか確認してください。');return;}
+  loadChecks();
+}
+setInterval(renderOshiboriBar,30000); // 21時ちょうどに自動で出す用
 /* 日付が変わったらチェックを取り直す（毎日リセット）＋清掃日の判定も更新 */
 setInterval(()=>{if(db&&checksDate&&checksDate!==todayStr())loadChecks();},60000);
 
