@@ -323,10 +323,6 @@ textarea:focus{border-color:var(--blue);background:#fff}
   border-bottom:1px dashed #e8ddc2;font-size:13.5px;flex-wrap:wrap}
 .prep_row:last-of-type{border-bottom:none}
 .prep_row b{white-space:nowrap}
-.prep_stock{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:1px 8px;margin-left:6px}
-.prep_stock.green{background:#e5f5eb;color:#1c7d43}
-.prep_stock.yellow{background:#fff3cd;color:#8a5a00}
-.prep_stock.red{background:#ffe1e1;color:#b02424}
 .prep_det{margin-top:8px}
 .prep_det summary{font-size:13px;font-weight:800;color:#7a5a10;cursor:pointer;padding:4px 0}
 .rescard{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--blue);
@@ -396,6 +392,12 @@ textarea:focus{border-color:var(--blue);background:#fff}
 .oshibar.show{display:block}
 .oshibar .nb_go{float:right;font-size:12px;background:rgba(255,255,255,.22);padding:2px 9px;border-radius:999px;margin-left:8px}
 @keyframes oshipulse{0%,100%{background-color:#1e6fd9}50%{background-color:#3b8bef}}
+/* ===== 瓶ビール発注通知バー（琥珀色＝他の通知と区別） ===== */
+.beerbar{display:none;margin:0;padding:11px 14px;background:#9a6a10;border-bottom:2px solid #6e4a08;color:#fff;
+  font-size:13.5px;font-weight:700;line-height:1.6;box-shadow:0 3px 8px rgba(0,0,0,.08);cursor:pointer;animation:beerpulse 2s ease-in-out infinite}
+.beerbar.show{display:block}
+.beerbar .nb_go{float:right;font-size:12px;background:rgba(255,255,255,.22);padding:2px 9px;border-radius:999px;margin-left:8px}
+@keyframes beerpulse{0%,100%{background-color:#9a6a10}50%{background-color:#b8831a}}
 /* チェック項目エディタ（フォーム内） */
 .chkwrap{background:#fff7f6;border:1.5px dashed #e8a79e;border-radius:12px;padding:10px 12px;margin-top:14px}
 .chkwrap .cw_ttl{font-size:13px;font-weight:800;color:var(--red)}
@@ -505,6 +507,8 @@ textarea:focus{border-color:var(--blue);background:#fff}
 <div id="checkBar" class="checkbar" onclick="goCheck()"></div>
 <!-- ========== おしぼり通知バー（毎週月・金の21時〜。「出しました」を押すまで消えない） ========== -->
 <div id="oshiboriBar" class="oshibar" onclick="oshiboriDone()"></div>
+<!-- ========== 瓶ビール発注通知バー（団体×飲み放題の2日前=発注/前日=冷蔵。オーナー端末のみ） ========== -->
+<div id="beerBar" class="beerbar" onclick="beerDone()"></div>
 </div><!-- /topbar -->
 
 <!-- ========== 在庫管理 ========== -->
@@ -1183,7 +1187,6 @@ async function loadInventory(){
   setConn('on','🟢 オンライン共有中（変更は全員に反映されます）');
   renderInventory();
   renderFeed();
-  if(currentTab==='reserve')renderReservations(); // 仕込みまとめの在庫チップに連動
 }
 
 function setupRealtime(){
@@ -2000,9 +2003,16 @@ async function loadCourses(){
 const SV_LABEL={each:'各自',share:'シェア',fixed:'卓1'};
 function courseItemPortions(x,n){
   const sv=x.sv||'each';
-  if(sv==='fixed')return Math.max(0.5,+x.fix||1);
+  if(sv==='fixed')return Math.max(0.5,+x.fix||1)*courseItemTables(x,n);
   if(sv==='share'){const r=+x.ratio||0.7;return Math.max(1,Math.ceil(n*r*2)/2);} // 0.5人前きざみ・最低1人前
   return n;
+}
+/* 卓1の品の皿数。per=「◯人ごとに1皿」（4人席基準など）。0=人数に関係なく1皿(従来)
+   例: per=4 → 4人まで1皿・6人なら2皿(6人席=4人+2人の感覚)・10人なら3皿 */
+function courseItemTables(x,n){
+  if((x.sv||'each')!=='fixed')return 0;
+  const per=+x.per||0;
+  return per>0?Math.max(1,Math.ceil(n/per)):1;
 }
 /* コース1件ぶんの計算（n人ぶんの原価/売上/原価率） */
 function courseCalc(c,n){
@@ -2015,9 +2025,9 @@ function courseCalc(c,n){
       const uc=menuUnitCost(it),mg=menuUnitGrams(it);
       cost+=uc*p;gram+=mg.g*p;ml+=mg.ml*p;
       if(mg.skip.length&&!skipMenus.includes(it.menu))skipMenus.push(it.menu);
-      rows.push({name:it.menu,unit:uc,unitG:mg.g,portions:p,sv:x.sv||'each',ratio:+x.ratio||0.7,fix:+x.fix||1,ok:true});
+      rows.push({name:it.menu,unit:uc,unitG:mg.g,portions:p,sv:x.sv||'each',ratio:+x.ratio||0.7,fix:+x.fix||1,per:+x.per||0,ok:true});
     }
-    else{missing++;rows.push({name:(x.menu||'？')+'（メニューから削除済み）',unit:0,unitG:0,portions:p,sv:x.sv||'each',ratio:+x.ratio||0.7,fix:+x.fix||1,ok:false});}
+    else{missing++;rows.push({name:(x.menu||'？')+'（メニューから削除済み）',unit:0,unitG:0,portions:p,sv:x.sv||'each',ratio:+x.ratio||0.7,fix:+x.fix||1,per:+x.per||0,ok:false});}
   });
   const price=+c.price||0, rev=price*n;
   return{cost,missing,rows,price,rev,profit:rev-cost,rate:rev>0?cost/rev*100:0,gram,ml,gpp:gram/n,mlpp:ml/n,skipMenus};
@@ -2044,7 +2054,9 @@ function courseVolHTML(k,n){
     <div class="note" style="margin-top:2px">目安: 宴会コースは1人あたり総量400〜500gでお腹いっぱい（350g未満は物足りない可能性）</div>${skip}</div>`;
 }
 function svChip(r){
-  const t=r.sv==='share'?`シェア ${r.ratio}人前/人`:r.sv==='fixed'?`卓に1つ・${r.fix||1}人前`:'各自1人前';
+  const t=r.sv==='share'?`シェア ${r.ratio}人前/人`
+        :r.sv==='fixed'?(r.per>0?`${r.per}人ごとに1皿・${r.fix||1}人前`:`卓に1つ・${r.fix||1}人前`)
+        :'各自1人前';
   return `<span class="svchip${r.sv==='each'?'':' on'}">${t}</span>`;
 }
 function renderCourses(){
@@ -2059,7 +2071,7 @@ function renderCourses(){
       if(r.unitG>0){
         const pp=Math.round(r.unitG*r.portions/2);
         gtxt=r.sv==='each'?`<span class="cig">約${Math.round(r.unitG)}g</span>`
-            :r.sv==='fixed'?`<span class="cig">卓${r.fix||1}人前=計${Math.round(r.unitG*(r.fix||1))}g÷人数</span>`
+            :r.sv==='fixed'?`<span class="cig">1皿${r.fix||1}人前=計${Math.round(r.unitG*(r.fix||1))}g${r.per>0?`（${r.per}人ごとに1皿）`:'÷人数'}</span>`
                            :`<span class="cig">1人前${Math.round(r.unitG)}g→1人 約${pp}g</span>`;
       }
       return `<div class="ci${r.ok?'':' miss'}"><span>${esc(r.name)} ${svChip(r)}</span><b>${r.ok?`${yen(r.unit)}${gtxt}`:'—'}</b></div>`;
@@ -2112,14 +2124,18 @@ function renderCourseForm(){
         ${[0.5,0.6,0.7,0.8,1].map(r=>`<option value="${r}"${(+x.ratio||0.7)===r?' selected':''}>1人あたり${r}人前</option>`).join('')}
       </select>`:'';
     const fixSel=sv==='fixed'?`<select onchange="setCourseItemFix(${i},this.value)">
-        ${[1,1.5,2,3].map(f=>`<option value="${f}"${(+x.fix||1)===f?' selected':''}>${f}人前ぶん</option>`).join('')}
+        ${[1,1.5,2,3].map(f=>`<option value="${f}"${(+x.fix||1)===f?' selected':''}>1皿${f}人前ぶん</option>`).join('')}
+      </select>`:'';
+    const perSel=sv==='fixed'?`<select onchange="setCourseItemPer(${i},this.value)">
+        <option value="0"${!(+x.per)?' selected':''}>人数に関係なく1皿だけ</option>
+        ${[2,3,4,5,6].map(pn=>`<option value="${pn}"${(+x.per||0)===pn?' selected':''}>${pn}人ごとに1皿（${pn}人席基準）</option>`).join('')}
       </select>`:'';
     return `<div class="pickcard">
       <div class="pickrow" style="border-bottom:none;padding:0 0 4px">
         <span class="nm">${esc(nm)}<span class="sub2">1人前 ${yen(uc)}${mg.g>0?`・約${Math.round(mg.g)}g`:''}${mg.ml>0?`・約${Math.round(mg.ml)}ml`:''} ／ ${crsSimN}人だと ${p}人前 = ${yen(uc*p)}${mg.g>0?`・約${Math.round(mg.g*p)}g`:''}</span></span>
         <button class="rmv" onclick="removeCourseItem(${i})">✕</button>
       </div>
-      <div class="svrow">${svSel}${ratioSel}${fixSel}</div>
+      <div class="svrow">${svSel}${ratioSel}${fixSel}${perSel}</div>
     </div>`;
   }).join(''):'<div class="pickempty">まだ何も入っていません。下の一覧からタップで追加してください。</div>';
   // 人数別シミュレーション表（＋1人あたりの量）
@@ -2146,13 +2162,14 @@ function renderCourseForm(){
 }
 function addCourseItem(id){
   const it=items.find(m=>m.id===id);if(!it)return;
-  draftCourse.items.push({id:it.id,menu:it.menu,sv:'each',ratio:0.7,fix:1});
+  draftCourse.items.push({id:it.id,menu:it.menu,sv:'each',ratio:0.7,fix:1,per:0});
   renderCourseForm();
 }
 function removeCourseItem(i){draftCourse.items.splice(i,1);renderCourseForm();}
 function setCourseItemSv(i,v){if(draftCourse.items[i]){draftCourse.items[i].sv=v;renderCourseForm();}}
 function setCourseItemRatio(i,v){if(draftCourse.items[i]){draftCourse.items[i].ratio=+v||0.7;renderCourseForm();}}
 function setCourseItemFix(i,v){if(draftCourse.items[i]){draftCourse.items[i].fix=+v||1;renderCourseForm();}}
+function setCourseItemPer(i,v){if(draftCourse.items[i]){draftCourse.items[i].per=+v||0;renderCourseForm();}}
 /* 画面下のリアルタイム集計バー（シミュレーション人数ぶんで計算） */
 function updateCourseBar(){
   const bar=document.getElementById('crsBar');if(!bar)return;
@@ -2658,6 +2675,7 @@ async function loadChecks(){
   checks=r.data||[];
   renderCheckBar();
   renderOshiboriBar();
+  renderBeerBar();
   if(currentTab==='guide')renderGuide();
 }
 function findCheck(source,idx){return checks.find(c=>c.source===source&&+c.item_idx===+idx);}
@@ -3070,6 +3088,7 @@ async function loadReservations(){
       reservations=r.data||[];
       setResConn('on','🟢 オーナーモード（すべての日程の予約が見えます）');
       renderReservations();
+      renderBeerBar();
       return;
     }
     console.error(r.error);
@@ -3169,6 +3188,12 @@ function resGoToday(){document.getElementById('res_date').value=todayStr();rende
    ・メニューの食材(按分入力)から必要量を合算し、同じ名前の在庫があれば
      いまの在庫数を並べて表示＝発注の目安
    ============================================================ */
+/* ---- 団体×飲み放題の瓶ビール ----
+   8名以上の団体が飲み放題のとき、最初だけ瓶ビールを出す運用。
+   本数=3名につき1本(端数切り捨て。例:10名→3本・9名→3本・12名→4本) */
+const BEER_MIN_PPL=8, BEER_PER=3;
+function isNomihodai(txt){return /飲み?放題|のみほうだい|ノミホ|飲放/.test(String(txt||''));}
+function beerBottles(n){return Math.floor(n/BEER_PER);}
 /* コース名の照合用: かなカナ・空白に加えて 全角数字→半角・カンマ類も無視（「3,000円」=「3000円」） */
 const normCourse=s=>normJa(s)
   .replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
@@ -3201,7 +3226,7 @@ function resPrepHTML(list){
       const key=it.menu||'？';
       const d=dishes[key]||(dishes[key]={serv:0,plates:0,sv:x.sv||'each'});
       d.serv+=p;
-      if((x.sv||'each')==='fixed')d.plates++;
+      d.plates+=courseItemTables(x,n); // ◯人ごとに1皿(4人席基準等)を反映した皿数
       (it.ings||[]).forEach(g=>{
         if((g.mode||'split')==='direct'){dirSkip.add(g.food||key);return;}
         let u=g.unit||'g',v=(+g.use||0)*p;
@@ -3213,29 +3238,79 @@ function resPrepHTML(list){
       });
     });
   });
-  if(!groups&&!noMatch.length)return'';
+  // この日の団体(8名以上)×飲み放題→最初の瓶ビール
+  const beers=list.filter(r=>(+r.people||0)>=BEER_MIN_PPL&&isNomihodai(r.course));
+  if(!groups&&!noMatch.length&&!beers.length)return'';
   const dRows=Object.entries(dishes).map(([nm,d])=>{
-    const cnt=d.sv==='fixed'?`${d.plates}卓分（計${fmt(d.serv)}人前）`:`${fmt(d.serv)}人前`;
+    const cnt=d.sv==='fixed'?`${d.plates}皿（計${fmt(d.serv)}人前）`:`${fmt(d.serv)}人前`;
     return `<div class="prep_row"><span>${esc(nm)}</span><b>${cnt}</b></div>`;
   }).join('');
+  const beerRow=beers.length?`<div class="prep_row"><span>🍺 最初の瓶ビール（8名以上×飲み放題）</span><b>${beers.map(r=>`${esc(r.guest_name||'？')}様${+r.people}名→${beerBottles(+r.people)}本`).join('／')}</b></div>`:'';
   const fRows=Object.values(foods).sort((a,b)=>String(a.name).localeCompare(String(b.name),'ja')).map(f=>{
-    const inv=(typeof ingredients!=='undefined'?ingredients:[]).find(g=>normJa(g.name||'')===normJa(f.name));
     const amt=(f.unit==='g'&&f.amt>=1000)?`${fmt(f.amt/1000)}kg`:`${fmt(f.amt)}${esc(f.unit)}`;
-    const stock=inv?`<span class="prep_stock ${statusOf(inv)}">在庫 ${fmt(+inv.stock||0)}${esc(inv.unit_name||'')}${inv.portion_label?`・小分け${esc(inv.portion_label)}`:''}</span>`:'';
-    return `<div class="prep_row"><span>${esc(f.name)}${stock}</span><b>必要 ${amt}</b></div>`;
+    return `<div class="prep_row"><span>${esc(f.name)}</span><b>必要 ${amt}</b></div>`;
   }).join('');
   const skipNote=dirSkip.size?`<div class="note">⚠ ${[...dirSkip].map(esc).join('・')} は「1食あたり直接入力（円）」のため量は出せません（金額のみの登録）。</div>`:'';
   const warn=noMatch.length?`<div class="note" style="color:var(--red)">⚠ ${noMatch.map(esc).join('<br>⚠ ')}</div>`:'';
-  if(!groups)return `<div class="prep_card">${warn}</div>`;
+  if(!groups)return `<div class="prep_card">${beerRow}${warn}</div>`;
   return `<div class="prep_card">
     <div class="prep_ttl">🍳 この日の仕込みまとめ（コース予約 ${groups}組・${people}名）</div>
+    ${beerRow}
     ${dRows}
     <details class="prep_det"><summary>🧾 食材の必要量を見る（発注の目安）</summary>${fRows||'<div class="note">量を計算できる食材がありません。</div>'}${skipNote}
-      <div class="note">※在庫の色: 🟢十分／🟡少なめ／🔴発注。在庫はパック数なので、必要量(g)と小分け目安を見て発注数を判断してください。</div>
+      <div class="note">※メニューに登録した食材の使用量から合算しています。発注数はこの必要量を目安に判断してください。</div>
     </details>
     ${warn}
   </div>`;
 }
+/* ---- 瓶ビール発注通知バー（オーナーの端末のみ） ----
+   ・2日前: 「今日発注してください」(前日から冷やすため)
+   ・前日 : 「今日から冷やしてください」
+   済みはinv_checks(source='beer:予約id:order/chill')で全端末共有・その日限り */
+function ymdAddDays(ymd,d){
+  const t=new Date(ymd+'T00:00:00');t.setDate(t.getDate()+d);
+  const p=n=>String(n).padStart(2,'0');
+  return `${t.getFullYear()}-${p(t.getMonth()+1)}-${p(t.getDate())}`;
+}
+function beerNotices(){
+  if(!resIsOwner())return[]; // 未来の予約はオーナーの端末しか持っていない
+  const out=[];
+  [[2,'order'],[1,'chill']].forEach(([d,kind])=>{
+    resOfDay(ymdAddDays(todayStr(),d)).forEach(r=>{
+      if((+r.people||0)>=BEER_MIN_PPL&&isNomihodai(r.course)&&!findCheck('beer:'+r.id+':'+kind,0))
+        out.push({r,kind,ymd:ymdAddDays(todayStr(),d)});
+    });
+  });
+  return out;
+}
+function renderBeerBar(){
+  const bar=document.getElementById('beerBar');if(!bar)return;
+  const ns=beerNotices();
+  if(!ns.length){bar.className='beerbar';bar.innerHTML='';return;}
+  const msgs=ns.map(n=>{
+    const b=beerBottles(+n.r.people);
+    return n.kind==='order'
+      ?`🍺 ${resDateLabel(n.ymd)} ${esc(n.r.guest_name||'？')}様 ${+n.r.people}名(飲み放題)→瓶ビール<b>${b}本</b>を今日発注！(前日から冷やすため)`
+      :`🍺 明日${resDateLabel(n.ymd)} ${esc(n.r.guest_name||'？')}様 ${+n.r.people}名→瓶ビール<b>${b}本</b>を今日から冷やしてください`;
+  });
+  bar.className='beerbar show';
+  bar.innerHTML=`${msgs.join('<br>')}<span class="nb_go">✔ 済み</span>`;
+}
+async function beerDone(){
+  if(!db){alert('接続がありません');return;}
+  const ns=beerNotices();if(!ns.length)return;
+  if(!confirm('表示中の瓶ビール通知(発注/冷蔵)を「済み」にしますか？'))return;
+  let who=getOperator();
+  if(!who){who=(prompt('対応した人のお名前を入れてください：')||'').trim();if(!who)return;setOperator(who);}
+  for(const n of ns){
+    const {error}=await db.from('inv_checks').insert({
+      check_on:todayStr(),source:'beer:'+n.r.id+':'+n.kind,item_idx:0,
+      label:`瓶ビール${beerBottles(+n.r.people)}本 ${n.kind==='order'?'発注':'冷蔵'}(${n.ymd} ${n.r.guest_name||''}様)`,who});
+    if(error){console.error(error);alert('記録に失敗しました。通信を確認してください。');return;}
+  }
+  loadChecks();
+}
+setInterval(renderBeerBar,60000); // 日付跨ぎで自動更新
 /* ---- 予約フォームのコース選択（🍱コースメーカーと連動） ---- */
 function buildYfCourseSel(cur){
   const sel=document.getElementById('yf_course_sel');
