@@ -316,6 +316,19 @@ textarea:focus{border-color:var(--blue);background:#fff}
 .res_today{font-size:15px;font-weight:800;color:var(--navy);background:#e7eef7;border-radius:10px;
   padding:9px 12px;text-align:center;margin-bottom:12px}
 .res_today .sub{display:block;font-size:12px;font-weight:700;color:var(--sub);margin-top:2px}
+/* ===== コース予約→仕込みまとめ ===== */
+.prep_card{background:#fdf9f0;border:1.5px solid #e0cf9e;border-radius:14px;padding:12px 14px;margin-bottom:12px}
+.prep_ttl{font-size:14px;font-weight:800;color:#7a5a10;margin-bottom:8px}
+.prep_row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;
+  border-bottom:1px dashed #e8ddc2;font-size:13.5px;flex-wrap:wrap}
+.prep_row:last-of-type{border-bottom:none}
+.prep_row b{white-space:nowrap}
+.prep_stock{display:inline-block;font-size:11px;font-weight:700;border-radius:999px;padding:1px 8px;margin-left:6px}
+.prep_stock.green{background:#e5f5eb;color:#1c7d43}
+.prep_stock.yellow{background:#fff3cd;color:#8a5a00}
+.prep_stock.red{background:#ffe1e1;color:#b02424}
+.prep_det{margin-top:8px}
+.prep_det summary{font-size:13px;font-weight:800;color:#7a5a10;cursor:pointer;padding:4px 0}
 .rescard{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--blue);
   border-radius:14px;padding:12px 14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
 .rescard.soon{border-left-color:var(--orange);background:#fffdf5}
@@ -756,6 +769,8 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <button onclick="resGoToday()">今日</button>
   </div>
   <div id="resTodayBar" class="res_today hide"></div>
+  <!-- コース予約から自動計算する「この日の仕込みまとめ」 -->
+  <div id="resPrep"></div>
   <div id="resList"></div>
   <div id="resLocked" class="res_lockbox" style="display:none">
     <div class="ic">🔒</div>
@@ -784,7 +799,11 @@ textarea:focus{border-color:var(--blue);background:#fff}
           <option>テーブル</option><option>カウンター</option><option>座敷</option><option>個室</option>
         </select>
       </div>
-      <div><label>コース・飲み放題</label><input id="yf_course" placeholder="例：4000円コース＋飲み放題"></div>
+      <div><label>コース・飲み放題</label>
+        <select id="yf_course_sel" onchange="onYfCourseSel()"></select>
+        <input id="yf_course" class="hide" placeholder="例：4000円コース＋飲み放題">
+        <div class="note">🍱 コースを選ぶと、予約一覧に「この日の仕込みまとめ」（作る量・食材の必要量）が自動で出ます。</div>
+      </div>
     </div>
     <label>📞 連絡先（電話）</label>
     <input id="yf_phone" type="tel" inputmode="tel" placeholder="例：090-1234-5678">
@@ -1164,6 +1183,7 @@ async function loadInventory(){
   setConn('on','🟢 オンライン共有中（変更は全員に反映されます）');
   renderInventory();
   renderFeed();
+  if(currentTab==='reserve')renderReservations(); // 仕込みまとめの在庫チップに連動
 }
 
 function setupRealtime(){
@@ -1710,6 +1730,7 @@ async function loadMenus(){
     render();
     // メニューの原価が変わったらコースの原価率も追随させる
     if(typeof courses!=='undefined'&&courses.length)renderCourses();
+    if(currentTab==='reserve')renderReservations(); // 仕込みまとめの量計算にも連動
   }finally{
     menuBusy=false;
     if(menuPending){ menuPending=false; loadMenus(); } // 実行中に来た更新をまとめて1回だけ反映
@@ -1970,6 +1991,7 @@ async function loadCourses(){
   courses=(r.data||[]).sort((a,b)=>((a.sort_order||0)-(b.sort_order||0))||String(a.created_at||'').localeCompare(String(b.created_at||'')));
   setCrsConn('on','🟢 オンライン共有中（コースは全員で共有）');
   renderCourses();
+  if(currentTab==='reserve')renderReservations(); // 仕込みまとめはコース内容に連動
 }
 /* ---- 品ごとの「出し方」 ----
    each  = 各自1人前（×人数。人数が増えても原価率は同じ）
@@ -1993,9 +2015,9 @@ function courseCalc(c,n){
       const uc=menuUnitCost(it),mg=menuUnitGrams(it);
       cost+=uc*p;gram+=mg.g*p;ml+=mg.ml*p;
       if(mg.skip.length&&!skipMenus.includes(it.menu))skipMenus.push(it.menu);
-      rows.push({name:it.menu,unit:uc,unitG:mg.g,portions:p,sv:x.sv||'each',ratio:+x.ratio||0.7,ok:true});
+      rows.push({name:it.menu,unit:uc,unitG:mg.g,portions:p,sv:x.sv||'each',ratio:+x.ratio||0.7,fix:+x.fix||1,ok:true});
     }
-    else{missing++;rows.push({name:(x.menu||'？')+'（メニューから削除済み）',unit:0,unitG:0,portions:p,sv:x.sv||'each',ratio:+x.ratio||0.7,ok:false});}
+    else{missing++;rows.push({name:(x.menu||'？')+'（メニューから削除済み）',unit:0,unitG:0,portions:p,sv:x.sv||'each',ratio:+x.ratio||0.7,fix:+x.fix||1,ok:false});}
   });
   const price=+c.price||0, rev=price*n;
   return{cost,missing,rows,price,rev,profit:rev-cost,rate:rev>0?cost/rev*100:0,gram,ml,gpp:gram/n,mlpp:ml/n,skipMenus};
@@ -2022,7 +2044,7 @@ function courseVolHTML(k,n){
     <div class="note" style="margin-top:2px">目安: 宴会コースは1人あたり総量400〜500gでお腹いっぱい（350g未満は物足りない可能性）</div>${skip}</div>`;
 }
 function svChip(r){
-  const t=r.sv==='share'?`シェア ${r.ratio}人前/人`:r.sv==='fixed'?'卓に1つ':'各自1人前';
+  const t=r.sv==='share'?`シェア ${r.ratio}人前/人`:r.sv==='fixed'?`卓に1つ・${r.fix||1}人前`:'各自1人前';
   return `<span class="svchip${r.sv==='each'?'':' on'}">${t}</span>`;
 }
 function renderCourses(){
@@ -2032,19 +2054,20 @@ function renderCourses(){
   box.innerHTML=courses.map(c=>{
     const k2=courseCalc(c,2);
     const rows=k2.rows.map(r=>{
-      // 量の表示: 各自=1人前がそのまま1人分。シェア/卓1は「1人前の量」と「1人あたりの量(2人時)」を併記
+      // 量の表示: 各自=1人前がそのまま1人分。シェア=1人あたり(2人時)。卓1=卓の合計を人数で分ける
       let gtxt='';
       if(r.unitG>0){
         const pp=Math.round(r.unitG*r.portions/2);
         gtxt=r.sv==='each'?`<span class="cig">約${Math.round(r.unitG)}g</span>`
-                          :`<span class="cig">1人前${Math.round(r.unitG)}g→1人 約${pp}g</span>`;
+            :r.sv==='fixed'?`<span class="cig">卓${r.fix||1}人前=計${Math.round(r.unitG*(r.fix||1))}g÷人数</span>`
+                           :`<span class="cig">1人前${Math.round(r.unitG)}g→1人 約${pp}g</span>`;
       }
       return `<div class="ci${r.ok?'':' miss'}"><span>${esc(r.name)} ${svChip(r)}</span><b>${r.ok?`${yen(r.unit)}${gtxt}`:'—'}</b></div>`;
     }).join('');
     return `<div class="crscard">
       <div class="crs_top"><p class="crs_name">🍱 ${esc(c.name||'(名称なし)')}</p><span class="crs_price">${yen(k2.price)}<span style="font-size:12px;color:var(--sub)">／1名</span></span></div>
       <div class="crs_items">${rows}</div>
-      <div class="note" style="margin-top:6px">※右の金額は1人前あたりの原価。シェア/卓1の品は「1人あたりの量(2人予約時)」も表示。人数ごとの合計は下の表。</div>
+      <div class="note" style="margin-top:6px">※右の金額は1人前あたりの原価。シェアの品は「1人あたりの量(2人予約時)」、卓1の品は「卓の合計量÷人数」。人数ごとの1人量は下の表。</div>
       ${courseVolHTML(k2,2)}
       ${courseSimTableHTML(n=>courseCalc(c,n),k2.price)}
       ${k2.missing?`<div class="note" style="color:var(--red)">⚠ 削除されたメニューが${k2.missing}品あります（原価0で計算中）。編集で入れ替えてください。</div>`:''}
@@ -3111,6 +3134,7 @@ function renderReservations(){
   document.getElementById('resLocked').style.display=locked?'block':'none';
   if(locked)document.getElementById('resCountdown').textContent=resWaitLabel();
   document.getElementById('resEmpty').style.display=(!locked&&!list.length)?'block':'none';
+  document.getElementById('resPrep').innerHTML=locked?'':resPrepHTML(list);
   document.getElementById('resList').innerHTML=locked?'':list.map(r=>{
     const chips=[];
     if(r.seat)chips.push(`<span class="res_chip">${esc(r.seat)}</span>`);
@@ -3137,6 +3161,103 @@ function resShiftDate(d){
   renderReservations();
 }
 function resGoToday(){document.getElementById('res_date').value=todayStr();renderReservations();}
+/* ============================================================
+   コース予約 → 仕込みまとめの自動計算
+   ・予約のコース名が🍱コースメーカーのコース名と一致した予約が対象
+     （表記ゆれ・「＋飲み放題」等の付け足しはnormJaの部分一致で吸収）
+   ・出し方(各自/シェア/卓1)×人数で「何を何人前(何卓)作るか」を合算
+   ・メニューの食材(按分入力)から必要量を合算し、同じ名前の在庫があれば
+     いまの在庫数を並べて表示＝発注の目安
+   ============================================================ */
+/* コース名の照合用: かなカナ・空白に加えて 全角数字→半角・カンマ類も無視（「3,000円」=「3000円」） */
+const normCourse=s=>normJa(s)
+  .replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+  .replace(/[,，、]/g,'');
+function resFindCourse(txt){
+  if(!txt)return null;
+  const t=normCourse(txt);
+  return courses.find(c=>c.name&&t.includes(normCourse(c.name)))
+      ||courses.find(c=>c.name&&normCourse(c.name).includes(t))
+      ||null;
+}
+function resPrepHTML(list){
+  if(typeof courses==='undefined'||!courses.length)return'';
+  const fmt=v=>String(Math.round(v*10)/10);
+  const dishes={};        // メニュー名→{serv:合計人前, plates:卓数, sv}
+  const foods={};         // 食材名|単位→{name,unit,amt}
+  const dirSkip=new Set();// 直接入力(円だけ)で量が出せない食材
+  const noMatch=[];       // コース欄はあるが計算できない予約
+  let groups=0, people=0;
+  list.forEach(r=>{
+    if(!r.course)return;
+    const c=resFindCourse(r.course);
+    if(!c){noMatch.push(`${r.guest_name||'？'}様「${r.course}」→コース表に見つかりません`);return;}
+    const n=+r.people||0;
+    if(!n){noMatch.push(`${r.guest_name||'？'}様（${c.name}）→人数が未入力のため計算できません`);return;}
+    groups++;people+=n;
+    (Array.isArray(c.items)?c.items:[]).forEach(x=>{
+      const it=items.find(m=>m.id===x.id);if(!it)return;
+      const p=courseItemPortions(x,n);
+      const key=it.menu||'？';
+      const d=dishes[key]||(dishes[key]={serv:0,plates:0,sv:x.sv||'each'});
+      d.serv+=p;
+      if((x.sv||'each')==='fixed')d.plates++;
+      (it.ings||[]).forEach(g=>{
+        if((g.mode||'split')==='direct'){dirSkip.add(g.food||key);return;}
+        let u=g.unit||'g',v=(+g.use||0)*p;
+        if(u==='kg'){u='g';v*=1000;}
+        if(v<=0)return;
+        const fk=normJa(g.food||'')+'|'+u;
+        const f=foods[fk]||(foods[fk]={name:g.food||'食材',unit:u,amt:0});
+        f.amt+=v;
+      });
+    });
+  });
+  if(!groups&&!noMatch.length)return'';
+  const dRows=Object.entries(dishes).map(([nm,d])=>{
+    const cnt=d.sv==='fixed'?`${d.plates}卓分（計${fmt(d.serv)}人前）`:`${fmt(d.serv)}人前`;
+    return `<div class="prep_row"><span>${esc(nm)}</span><b>${cnt}</b></div>`;
+  }).join('');
+  const fRows=Object.values(foods).sort((a,b)=>String(a.name).localeCompare(String(b.name),'ja')).map(f=>{
+    const inv=(typeof ingredients!=='undefined'?ingredients:[]).find(g=>normJa(g.name||'')===normJa(f.name));
+    const amt=(f.unit==='g'&&f.amt>=1000)?`${fmt(f.amt/1000)}kg`:`${fmt(f.amt)}${esc(f.unit)}`;
+    const stock=inv?`<span class="prep_stock ${statusOf(inv)}">在庫 ${fmt(+inv.stock||0)}${esc(inv.unit_name||'')}${inv.portion_label?`・小分け${esc(inv.portion_label)}`:''}</span>`:'';
+    return `<div class="prep_row"><span>${esc(f.name)}${stock}</span><b>必要 ${amt}</b></div>`;
+  }).join('');
+  const skipNote=dirSkip.size?`<div class="note">⚠ ${[...dirSkip].map(esc).join('・')} は「1食あたり直接入力（円）」のため量は出せません（金額のみの登録）。</div>`:'';
+  const warn=noMatch.length?`<div class="note" style="color:var(--red)">⚠ ${noMatch.map(esc).join('<br>⚠ ')}</div>`:'';
+  if(!groups)return `<div class="prep_card">${warn}</div>`;
+  return `<div class="prep_card">
+    <div class="prep_ttl">🍳 この日の仕込みまとめ（コース予約 ${groups}組・${people}名）</div>
+    ${dRows}
+    <details class="prep_det"><summary>🧾 食材の必要量を見る（発注の目安）</summary>${fRows||'<div class="note">量を計算できる食材がありません。</div>'}${skipNote}
+      <div class="note">※在庫の色: 🟢十分／🟡少なめ／🔴発注。在庫はパック数なので、必要量(g)と小分け目安を見て発注数を判断してください。</div>
+    </details>
+    ${warn}
+  </div>`;
+}
+/* ---- 予約フォームのコース選択（🍱コースメーカーと連動） ---- */
+function buildYfCourseSel(cur){
+  const sel=document.getElementById('yf_course_sel');
+  const names=(typeof courses!=='undefined'?courses:[]).map(c=>c.name).filter(Boolean);
+  sel.innerHTML=`<option value="">（コースなし）</option>`
+    +names.map(n=>`<option value="${escA(n)}">🍱 ${esc(n)}</option>`).join('')
+    +`<option value="__free__">✏️ 自由入力（飲み放題つき等）</option>`;
+  const inp=document.getElementById('yf_course');
+  const free=!!cur&&!names.includes(cur);
+  if(free){sel.value='__free__';inp.classList.remove('hide');inp.value=cur;}
+  else{sel.value=cur||'';inp.classList.add('hide');inp.value='';}
+}
+function onYfCourseSel(){
+  const free=document.getElementById('yf_course_sel').value==='__free__';
+  const inp=document.getElementById('yf_course');
+  inp.classList.toggle('hide',!free);
+  if(free)inp.focus();
+}
+function yfCourseValue(){
+  const v=document.getElementById('yf_course_sel').value;
+  return v==='__free__'?yf_course.value.trim():v;
+}
 /* ---- オーナー認証（パスワードはSupabase側で照合） ---- */
 async function resLogin(){
   if(!db){alert('接続がありません');return;}
@@ -3175,7 +3296,7 @@ function openResForm(id){
   yf_name.value=r?r.guest_name:'';
   yf_people.value=r&&r.people?r.people:'';
   yf_seat.value=r?(r.seat||''):'';
-  yf_course.value=r?r.course:'';
+  buildYfCourseSel(r?(r.course||''):'');
   yf_phone.value=r?r.phone:'';
   yf_note.value=r?r.note:'';
   showPage('resform');
@@ -3189,7 +3310,7 @@ async function saveReservation(){
   const r=await db.rpc('res_save',{
     p_pass:resOwnerPass, p_id:resEditId, p_on:yf_date.value, p_start:yf_time.value||'',
     p_name:yf_name.value.trim(), p_people:+yf_people.value||0, p_seat:yf_seat.value,
-    p_course:yf_course.value.trim(), p_phone:yf_phone.value.trim(), p_note:yf_note.value.trim()
+    p_course:yfCourseValue(), p_phone:yf_phone.value.trim(), p_note:yf_note.value.trim()
   });
   showSaving(false);
   if(r.error){
