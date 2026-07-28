@@ -459,6 +459,33 @@ textarea:focus{border-color:var(--blue);background:#fff}
 .crsbar .l{line-height:1.4}
 .crsbar .l small{display:block;font-size:11px;font-weight:700;opacity:.8}
 .crsbar .rate{font-size:16px;padding:4px 12px}
+/* ---- ⭐口コミ返信メーカー ---- */
+.rvcard{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);border-left:5px solid #f5a623}
+.rvcard.st_approved{border-left-color:#2f7bd9}
+.rvcard.st_posted{border-left-color:#2fa34f;opacity:.88}
+.rv_head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.rv_starline{color:#f5a623;font-size:15px;letter-spacing:1px}
+.rv_author{font-weight:700;font-size:15px}
+.rv_date{color:#888;font-size:12px}
+.rv_st{font-size:11px;font-weight:700;border-radius:999px;padding:2px 9px;background:#fff3e0;color:#b26a00;margin-left:auto;white-space:nowrap}
+.rv_st.new{background:#ffe9e9;color:#c0392b}
+.rv_st.approved{background:#e3efff;color:#1f5fb0}
+.rv_st.posted{background:#e7f6ec;color:#1e7a3c}
+.rv_body{white-space:pre-wrap;background:#faf7f2;border-radius:10px;padding:10px;margin:8px 0;font-size:14px;line-height:1.6}
+.rv_reply{white-space:pre-wrap;background:#eef6ff;border-radius:10px;padding:10px;margin:8px 0;font-size:14px;line-height:1.6}
+.rv_replylabel{font-size:12px;font-weight:700;color:#1f5fb0;margin-top:8px}
+.rv_ta{width:100%;min-height:150px;margin-top:6px}
+.rv_btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.rv_btns .btn{flex:1 1 45%;width:auto;margin-top:0;padding:12px;font-size:14px}
+.rv_small{font-size:12px;color:#777;margin-top:6px}
+.rv_gen{font-size:13px;font-weight:700;color:#b26a00;padding:10px;text-align:center}
+.rv_star_pick{display:flex;gap:4px;margin:6px 0 14px}
+.rv_star_pick button{font-size:28px;background:none;border:none;padding:2px 4px;color:#ddd;cursor:pointer}
+.rv_star_pick button.on{color:#f5a623}
+.rv_sample{background:#faf7f2;border-radius:10px;padding:10px;margin-bottom:8px;font-size:13px}
+.rv_sample .q{color:#555;white-space:pre-wrap}
+.rv_sample .a{color:#1f5fb0;white-space:pre-wrap;margin-top:6px;border-top:1px dashed #ddd;padding-top:6px}
+.rv_sample .del{font-size:12px;color:#c0392b;background:none;border:none;margin-top:6px;padding:0}
 </style>
 </head>
 <body>
@@ -498,6 +525,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
   <div class="tab" data-tab="handover" onclick="switchTab('handover')">📨引き継ぎ<span class="cnt" id="cnt-handover"></span></div>
   <div class="tab" data-tab="reserve" onclick="switchTab('reserve')">📅予約<span class="cnt" id="cnt-reserve"></span></div>
   <div class="tab" data-tab="shift" onclick="switchTab('shift')">🗓シフト<span class="cnt" id="cnt-shift"></span></div>
+  <div class="tab" data-tab="review" onclick="switchTab('review')">⭐口コミ<span class="cnt" id="cnt-review"></span></div>
   <div class="tab" data-tab="calc" onclick="switchTab('calc')">🧮税込</div>
 </div>
 
@@ -1047,6 +1075,45 @@ textarea:focus{border-color:var(--blue);background:#fff}
   </div>
 </div>
 
+<!-- ========== ⭐口コミ返信メーカー ========== -->
+<div id="tab-review" class="wrap hide">
+  <div id="rvConnBar" class="conn off">接続中…</div>
+  <div class="segbar" id="rvSeg"></div>
+  <div class="note" style="margin-bottom:10px">Googleの口コミを登録すると、お店の口調で返信文を自動で作ります。<br>OKした返信文は「📋コピー」してGoogleマップの返信欄に貼り付けてください。</div>
+  <div id="reviewList"></div>
+  <div id="reviewEmpty" class="empty" style="display:none">
+    まだ口コミが登録されていません。<br>下の「＋ 口コミを登録」から追加してください。
+  </div>
+  <details class="feedwrap">
+    <summary>🎓 お手本の返信文（過去にGoogleへ返信したもの）</summary>
+    <div class="note">ここに「口コミ＋実際の返信」を登録しておくと、AIがお店の口調をまねて返信文を作ります。</div>
+    <div id="sampleList"></div>
+    <label>お客様の口コミ</label>
+    <textarea id="rvs_review" placeholder="例：料理がどれも美味しかったです！"></textarea>
+    <label>お店の返信文</label>
+    <textarea id="rvs_reply" placeholder="例：ご来店ありがとうございます。..."></textarea>
+    <button class="btn sub" onclick="addReplySample()">＋ お手本として追加</button>
+  </details>
+</div>
+
+<!-- ========== 口コミ 登録/編集フォーム ========== -->
+<div id="reviewFormPage" class="wrap hide">
+  <div class="card">
+    <h2 class="sec" id="reviewFormTitle">＋ 口コミを登録</h2>
+    <label>投稿者の名前（ニックネーム）</label>
+    <input id="rv_author" placeholder="例：田中太郎">
+    <label>⭐ 評価（星の数）</label>
+    <div class="rv_star_pick" id="rv_stars"></div>
+    <label>口コミ本文（Googleからコピペ）</label>
+    <textarea id="rv_body" style="min-height:120px" placeholder="例：初めて行きましたが、唐揚げが最高でした！"></textarea>
+    <label>📅 口コミの日付（任意）</label>
+    <input id="rv_on" type="date">
+    <button class="btn" onclick="saveReview()">保存する</button>
+    <button class="btn sub" onclick="showPage('review')">キャンセル</button>
+    <button class="btn danger hide" id="reviewDelBtn" onclick="deleteReview()">この口コミを削除</button>
+  </div>
+</div>
+
 <!-- コース編集中の画面下・リアルタイム集計バー -->
 <div id="crsBar" class="crsbar"></div>
 
@@ -1138,6 +1205,7 @@ function initDB(){
   loadShifts();
   loadChecks();
   loadStaff();
+  loadReviews();
   renderOshiboriBar(); // 接続に関係なく起動時に時刻判定（オフラインでも月金21時は出す）
   resWasOpen=resIsOpenNow(); // 起動直後に「16時になった」と誤判定しないように
   sftWasOpen=sftIsOpenNow();
@@ -1152,7 +1220,7 @@ async function reloadAll(){
   try{
     await Promise.all([
       loadInventory(),loadRecipes(),loadMenus(),loadCourses(),
-      loadPortions(),loadSuppliers(),loadGuides(),loadHandovers(),loadReservations(),loadShifts(),loadChecks(),loadStaff()
+      loadPortions(),loadSuppliers(),loadGuides(),loadHandovers(),loadReservations(),loadShifts(),loadChecks(),loadStaff(),loadReviews()
     ]);
   }catch(e){console.error(e);}
   finally{ if(btn)setTimeout(()=>btn.classList.remove('spin'),500); }
@@ -1207,6 +1275,8 @@ function setupRealtime(){
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_shifts'},loadShifts)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_checks'},loadChecks)
     .on('postgres_changes',{event:'*',schema:'public',table:'inv_staff'},loadStaff)
+    .on('postgres_changes',{event:'*',schema:'public',table:'inv_reviews'},loadReviews)
+    .on('postgres_changes',{event:'*',schema:'public',table:'inv_reply_samples'},loadReviews)
     .subscribe();
 }
 
@@ -1275,6 +1345,8 @@ function updateTabCounts(){
   setTabCount('cnt-reserve',(typeof reservations!=='undefined'?resOfDay(todayStr()).length:0));
   // シフトも「今日の分」の件数（16時前・非オーナーは0件＝バッジなし）
   setTabCount('cnt-shift',(typeof shifts!=='undefined'?sftOfDay(todayStr()).length:0));
+  // 口コミは「まだ投稿していない分」の件数
+  setTabCount('cnt-review',(typeof reviews!=='undefined'?reviews.filter(r=>r.status!=='posted').length:0));
 }
 function renderInventory(){
   updateTabCounts();
@@ -3812,6 +3884,8 @@ function showPage(p){
   document.getElementById('tab-shift').classList.toggle('hide',p!=='shift');
   document.getElementById('shiftFormPage').classList.toggle('hide',p!=='shiftform');
   document.getElementById('staffPage').classList.toggle('hide',p!=='staffpage');
+  document.getElementById('tab-review').classList.toggle('hide',p!=='review');
+  document.getElementById('reviewFormPage').classList.toggle('hide',p!=='reviewform');
   document.getElementById('tab-calc').classList.toggle('hide',p!=='calc');
   document.getElementById('formPage').classList.toggle('hide',p!=='form');
   document.getElementById('ingFormPage').classList.toggle('hide',p!=='ingform');
@@ -3847,6 +3921,7 @@ function showPage(p){
     if(sftIsOwner()){fab.classList.remove('hide');fab.textContent='＋ 出勤を追加';}
     else fab.classList.add('hide');
   }
+  else if(p==='review'){fab.classList.remove('hide');fab.textContent='＋ 口コミを登録';}
   else fab.classList.add('hide');
   window.scrollTo(0,0);
 }
@@ -3861,6 +3936,285 @@ function fabAction(){
   else if(currentTab==='handover')openHandoverForm();
   else if(currentTab==='reserve'){if(resIsOwner())openResForm();}
   else if(currentTab==='shift'){if(sftIsOwner())openShiftForm();}
+  else if(currentTab==='review')openReviewForm();
+}
+
+/* ============================================================
+   ⭐口コミ返信メーカー
+   Google口コミを登録 → AI(または文例)で返信文を作成 → OK → コピペで投稿
+   AI生成 = Supabase Edge Function「reply-gen」(Claude API)。
+   未設定でも内蔵の文例で動く(その場合は🟡表示)。
+   ============================================================ */
+const RV_STORE_NAME='隠れ家居酒屋たけのぼり';
+const RV_FN_URL=SUPABASE_URL+'/functions/v1/reply-gen';
+let reviews=[], replySamples=[], reviewEditId=null, rvFilter='todo', rvRating=5, rvBusyId=null;
+
+function setRvConn(cls,text){const b=document.getElementById('rvConnBar');if(b){b.className='conn '+cls;b.textContent=text;}}
+
+async function loadReviews(){
+  if(!db)return;
+  const [r,s]=await Promise.all([
+    db.from('inv_reviews').select('*').order('created_at',{ascending:false}),
+    db.from('inv_reply_samples').select('*').order('created_at',{ascending:false})
+  ]);
+  if(r.error){console.error(r.error);setRvConn('err','口コミ表が未作成です（supabase_reviews.sql を実行してください）');reviews=[];renderReviews();return;}
+  reviews=r.data||[];
+  replySamples=(s&&!s.error)?(s.data||[]):[];
+  setRvConn('on','🟢 オンライン共有中（口コミ返信は全員で共有）');
+  renderReviews();
+}
+
+function rvStars(n){n=Math.max(1,Math.min(5,+n||5));return '★'.repeat(n)+'☆'.repeat(5-n);}
+
+function renderRvSeg(){
+  const box=document.getElementById('rvSeg');if(!box)return;
+  const segs=[['todo','📝 対応する'],['posted','✅ 投稿済み'],['all','すべて']];
+  box.innerHTML=segs.map(([k,l])=>{
+    let n=0;
+    if(k==='todo')n=reviews.filter(r=>r.status!=='posted').length;
+    else if(k==='posted')n=reviews.filter(r=>r.status==='posted').length;
+    else n=reviews.length;
+    return `<button class="${rvFilter===k?'on':''}" onclick="rvSetFilter('${k}')">${l} ${n}</button>`;
+  }).join('');
+}
+function rvSetFilter(k){rvFilter=k;renderReviews();}
+
+function renderReviews(){
+  updateTabCounts();
+  renderRvSeg();
+  renderReplySamples();
+  const box=document.getElementById('reviewList');if(!box)return;
+  document.getElementById('reviewEmpty').style.display=reviews.length?'none':'block';
+  let list=[...reviews];
+  if(rvFilter==='todo')list=list.filter(r=>r.status!=='posted');
+  else if(rvFilter==='posted')list=list.filter(r=>r.status==='posted');
+  if(!list.length&&reviews.length){box.innerHTML='<div class="empty">この分類の口コミはありません。</div>';return;}
+  box.innerHTML=list.map(rv=>{
+    const st=rv.status||'new';
+    const stLabel={new:'返信文なし',draft:'確認待ち',approved:'投稿してOK',posted:'投稿済み'}[st]||st;
+    const date=rv.review_on?mdLabel(rv.review_on):'';
+    let body='';
+    if(rvBusyId===rv.id){
+      body='<div class="rv_gen">✨ 返信文を考え中…（10秒ほどお待ちください）</div>';
+    }else if(st==='new'){
+      body=`<div class="rv_btns"><button class="btn" onclick="genReply('${rv.id}')">✨ 返信文を作る</button></div>`;
+    }else if(st==='draft'){
+      body=`<div class="rv_replylabel">✍️ 返信文の案（直接書き直せます）</div>
+        <textarea class="rv_ta" id="rvta_${rv.id}">${esc(rv.reply_draft||'')}</textarea>
+        <div class="rv_btns">
+          <button class="btn" onclick="approveReply('${rv.id}')">✅ この返信でOK</button>
+          <button class="btn sub" onclick="genReply('${rv.id}')">🔄 作り直す</button>
+        </div>`;
+    }else if(st==='approved'){
+      body=`<div class="rv_replylabel">✅ OK済みの返信文</div>
+        <div class="rv_reply">${esc(rv.reply_final||'')}</div>
+        <div class="rv_btns">
+          <button class="btn" onclick="copyReply('${rv.id}')">📋 返信文をコピー</button>
+          <button class="btn sub" onclick="backToDraft('${rv.id}')">✏️ 書き直す</button>
+          <button class="btn" style="background:#2fa34f" onclick="markPosted('${rv.id}')">✔ Googleに投稿しました</button>
+        </div>
+        <div class="rv_small">コピー → Googleマップの「ビジネス」→「クチコミ」→ 返信欄に貼り付け → 投稿したら「✔投稿しました」を押してください。</div>`;
+    }else{
+      body=`<div class="rv_replylabel">📮 投稿した返信文</div>
+        <div class="rv_reply">${esc(rv.reply_final||rv.reply_draft||'')}</div>`;
+    }
+    return `<div class="rvcard st_${st}">
+      <div class="rv_head">
+        <span class="rv_starline">${rvStars(rv.rating)}</span>
+        <span class="rv_author">${esc(rv.author||'名無し')}</span>
+        ${date?`<span class="rv_date">📅 ${date}</span>`:''}
+        <span class="rv_st ${st}">${stLabel}</span>
+      </div>
+      <div class="rv_body">${esc(rv.body||'')}</div>
+      ${body}
+      <button class="sp_edit" onclick="openReviewForm('${rv.id}')">✏️ 口コミを編集</button>
+    </div>`;
+  }).join('');
+}
+
+/* ---- お手本(過去の返信) ---- */
+function renderReplySamples(){
+  const box=document.getElementById('sampleList');if(!box)return;
+  box.innerHTML=replySamples.length?replySamples.map(s=>`<div class="rv_sample">
+    <div class="q">🗣 ${esc(s.review_body||'')}</div>
+    <div class="a">🏮 ${esc(s.reply_body||'')}</div>
+    <button class="del" onclick="deleteReplySample('${s.id}')">🗑 このお手本を削除</button>
+  </div>`).join(''):'<div class="note">まだお手本がありません。過去の返信を登録するとAIの口調が近づきます。</div>';
+}
+async function addReplySample(){
+  if(!db){alert('接続がありません');return;}
+  const rb=document.getElementById('rvs_review').value.trim();
+  const pb=document.getElementById('rvs_reply').value.trim();
+  if(!rb||!pb){alert('口コミと返信文の両方を入れてください');return;}
+  const res=await db.from('inv_reply_samples').insert({review_body:rb,reply_body:pb});
+  if(res.error){console.error(res.error);alert('保存に失敗しました（supabase_reviews.sql を実行してください）');return;}
+  document.getElementById('rvs_review').value='';
+  document.getElementById('rvs_reply').value='';
+  loadReviews();
+}
+async function deleteReplySample(id){
+  if(!db)return;
+  if(!confirmDelete('このお手本を削除しますか？'))return;
+  const {error}=await db.from('inv_reply_samples').delete().eq('id',id);
+  if(error){console.error(error);alert('削除に失敗しました');return;}
+  loadReviews();
+}
+
+/* ---- 口コミ登録/編集フォーム ---- */
+function renderRvStarPick(){
+  const box=document.getElementById('rv_stars');if(!box)return;
+  box.innerHTML=[1,2,3,4,5].map(n=>
+    `<button type="button" class="${n<=rvRating?'on':''}" onclick="rvSetRating(${n})">★</button>`).join('');
+}
+function rvSetRating(n){rvRating=n;renderRvStarPick();}
+function openReviewForm(id){
+  reviewEditId=id||null;
+  document.getElementById('reviewFormTitle').textContent=id?'口コミを編集':'＋ 口コミを登録';
+  document.getElementById('reviewDelBtn').classList.toggle('hide',!id);
+  const rv=id?reviews.find(x=>x.id===id):null;
+  rv_author.value=rv?rv.author:'';
+  rv_body.value=rv?rv.body:'';
+  rv_on.value=rv?(rv.review_on||''):'';
+  rvRating=rv?(+rv.rating||5):5;
+  renderRvStarPick();
+  showPage('reviewform');
+}
+async function saveReview(){
+  if(!db){alert('接続がありません');return;}
+  const body=rv_body.value.trim();
+  if(!body){alert('口コミ本文を入れてください');return;}
+  const row={author:rv_author.value.trim(),rating:rvRating,body,review_on:rv_on.value||null};
+  if(reviewEditId){
+    const res=await db.from('inv_reviews').update({...row,updated_at:new Date().toISOString()}).eq('id',reviewEditId);
+    if(res.error){console.error(res.error);alert('保存に失敗しました（supabase_reviews.sql を実行してください）');return;}
+  }else{
+    const res=await db.from('inv_reviews').insert({...row,status:'new'});
+    if(res.error){console.error(res.error);alert('保存に失敗しました（supabase_reviews.sql を実行してください）');return;}
+  }
+  showPage('review');loadReviews();
+}
+async function deleteReview(){
+  if(!reviewEditId||!db)return;
+  if(!confirmDelete('この口コミを削除しますか？'))return;
+  const {error}=await db.from('inv_reviews').delete().eq('id',reviewEditId);
+  if(error){console.error(error);alert('削除に失敗しました');return;}
+  showPage('review');loadReviews();
+}
+
+/* ---- 返信文の生成 ---- */
+async function genReply(id){
+  const rv=reviews.find(x=>x.id===id);
+  if(!rv||!db||rvBusyId)return;
+  rvBusyId=id;renderReviews();
+  let reply='',engine='tpl';
+  try{reply=await aiReply(rv);engine='ai';}
+  catch(e){console.warn('AI生成が使えないため文例で作成します',e);reply=templateReply(rv);}
+  rvBusyId=null;
+  const res=await db.from('inv_reviews').update({reply_draft:reply,status:'draft',engine,updated_at:new Date().toISOString()}).eq('id',id);
+  if(res.error){console.error(res.error);alert('保存に失敗しました（通信を確認してください）');}
+  await loadReviews();
+  if(engine==='tpl')setRvConn('on','🟡 AI未接続のため文例で作成しました（Edge Function「reply-gen」を設定するとAIが書きます）');
+}
+async function aiReply(rv){
+  const ctrl=new AbortController();
+  const t=setTimeout(()=>ctrl.abort(),30000);
+  try{
+    const res=await fetch(RV_FN_URL,{method:'POST',signal:ctrl.signal,
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+SUPABASE_KEY,'apikey':SUPABASE_KEY},
+      body:JSON.stringify({
+        store:RV_STORE_NAME,
+        review:{author:rv.author,rating:rv.rating,body:rv.body},
+        menus:rvMenuNames(),
+        samples:replySamples.slice(0,8).map(s=>({review_body:s.review_body,reply_body:s.reply_body}))
+      })});
+    if(!res.ok)throw new Error('fn status '+res.status);
+    const d=await res.json();
+    if(!d.reply)throw new Error('empty reply');
+    return String(d.reply).trim();
+  }finally{clearTimeout(t);}
+}
+/* メニュー名一覧(AIへの参考・言及検出に使う) */
+function rvMenuNames(){
+  const names=[];
+  (typeof items!=='undefined'&&items?items:[]).forEach(i=>{if(i.menu)names.push(i.menu);});
+  (typeof recipes!=='undefined'&&recipes?recipes:[]).forEach(r=>{if(r.name&&!names.includes(r.name))names.push(r.name);});
+  return names.slice(0,60);
+}
+function rvMentionedMenus(body){
+  const nb=normJa(body||'');const out=[];
+  for(const n of rvMenuNames()){
+    const nn=normJa(n);
+    if(nn.length>=2&&nb.includes(nn)&&!out.includes(n))out.push(n);
+    if(out.length>=2)break;
+  }
+  return out;
+}
+/* AI未接続時の内蔵文例(評価と口コミ内のメニュー言及で組み立て) */
+function rvPick(arr,seed){return arr[Math.abs(seed)%arr.length];}
+function templateReply(rv){
+  const seed=(String(rv.body||'').length*7+String(rv.author||'').length*3+(+rv.rating||5));
+  const name=rv.author?rv.author+' 様':'お客様';
+  const men=rvMentionedMenus(rv.body||'');
+  const greet=[
+    name+'、この度は当店にご来店いただき、誠にありがとうございます。',
+    name+'、ご来店と温かい口コミをありがとうございます。',
+    name+'、数あるお店の中から当店をお選びいただき、ありがとうございます。'
+  ];
+  const menLine=men.length?`「${men.join('」「')}」をお気に召していただけたようで、大変嬉しく思います。`:'';
+  let mid='',close='';
+  const r=+rv.rating||5;
+  if(r>=4){
+    mid=rvPick([
+      'お楽しみいただけたご様子が伝わってきて、スタッフ一同とても励みになります。',
+      '嬉しいお言葉をいただき、スタッフ一同大変喜んでおります。'
+    ],seed);
+    close=rvPick([
+      '季節ごとにおすすめのメニューもご用意しておりますので、またのご来店を心よりお待ちしております。',
+      'これからも美味しい料理と居心地の良い空間でお迎えできるよう努めてまいります。またのご来店を心よりお待ちしております。'
+    ],seed+1);
+  }else if(r===3){
+    mid='貴重なご意見をいただき、ありがとうございます。よりご満足いただけるよう、料理・サービスの改善に努めてまいります。';
+    close='ぜひまた機会がございましたら、ご来店いただけますと幸いです。お待ちしております。';
+  }else{
+    mid='せっかくご来店いただいたにもかかわらず、ご期待に沿えず申し訳ございませんでした。いただいたご意見を真摯に受け止め、スタッフ一同で改善に取り組んでまいります。';
+    close='もし機会をいただけるようでしたら、次回は必ずご満足いただけるよう精一杯努めます。この度は貴重なご意見をありがとうございました。';
+  }
+  return [rvPick(greet,seed),menLine,mid,close].filter(Boolean).join('\n')+'\n\n'+RV_STORE_NAME;
+}
+
+/* ---- OK・コピー・投稿済み ---- */
+async function approveReply(id){
+  if(!db)return;
+  const ta=document.getElementById('rvta_'+id);
+  const rv=reviews.find(x=>x.id===id);
+  const text=String(ta?ta.value:(rv&&rv.reply_draft)||'').trim();
+  if(!text){alert('返信文が空です');return;}
+  const res=await db.from('inv_reviews').update({reply_draft:text,reply_final:text,status:'approved',updated_at:new Date().toISOString()}).eq('id',id);
+  if(res.error){console.error(res.error);alert('保存に失敗しました');return;}
+  loadReviews();
+}
+async function backToDraft(id){
+  if(!db)return;
+  const res=await db.from('inv_reviews').update({status:'draft',updated_at:new Date().toISOString()}).eq('id',id);
+  if(res.error){console.error(res.error);alert('保存に失敗しました');return;}
+  loadReviews();
+}
+async function copyReply(id){
+  const rv=reviews.find(x=>x.id===id);if(!rv)return;
+  const text=rv.reply_final||rv.reply_draft||'';
+  try{await navigator.clipboard.writeText(text);}
+  catch(e){
+    const ta=document.createElement('textarea');ta.value=text;
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();
+  }
+  alert('返信文をコピーしました！\n\nGoogleマップの「ビジネス」→「クチコミ」→ 該当の口コミの「返信」に貼り付けて投稿してください。\n投稿できたら「✔ Googleに投稿しました」を押してください。');
+}
+async function markPosted(id){
+  if(!db)return;
+  if(!confirm('Googleに投稿しましたか？（投稿済みに移動します）'))return;
+  const res=await db.from('inv_reviews').update({status:'posted',posted_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',id);
+  if(res.error){console.error(res.error);alert('保存に失敗しました');return;}
+  loadReviews();
 }
 
 /* ---- 税込計算機 ---- */
