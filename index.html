@@ -4056,7 +4056,7 @@ function renderReviews(){
     }else if(st==='new'){
       body=`<div class="rv_btns"><button class="btn" onclick="genReply('${rv.id}')">✨ 返信文を作る</button></div>`;
     }else if(st==='draft'){
-      body=`<div class="rv_replylabel">✍️ 返信文の案（直接書き直せます）</div>
+      body=`<div class="rv_replylabel">✍️ 返信文の案（直接書き直せます）${rv.engine==='ai'?' <span style="color:#1e7a3c">🤖 AIが過去の返信を参考に作成</span>':rv.engine==='tpl'?' <span style="color:#b26a00">📋 内蔵文例で作成（AI未接続）</span>':''}</div>
         <textarea class="rv_ta" id="rvta_${rv.id}">${esc(rv.reply_draft||'')}</textarea>
         <div class="rv_btns">
           <button class="btn" onclick="approveReply('${rv.id}')">✅ この返信でOK</button>
@@ -4233,7 +4233,7 @@ function templateReply(rv){
     mid='せっかくご来店いただいたにもかかわらず、ご期待に沿えず申し訳ございませんでした。いただいたご意見を真摯に受け止め、スタッフ一同で改善に取り組んでまいります。';
     close='もし機会をいただけるようでしたら、次回は必ずご満足いただけるよう精一杯努めます。この度は貴重なご意見をありがとうございました。';
   }
-  return [rvPick(greet,seed),menLine,mid,close].filter(Boolean).join('\n')+'\n\n'+RV_STORE_NAME;
+  return [rvPick(greet,seed),menLine,mid,close].filter(Boolean).join('\n')+'\n\n竹の塚駅西口徒歩２分　隠れ家居酒屋　たけのぼり';
 }
 
 /* ---- OK・コピー・投稿済み ---- */
