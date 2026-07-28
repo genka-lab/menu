@@ -21,7 +21,30 @@ const cors = {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
-    const { store, review, menus, samples } = await req.json();
+    const { pass, store, review, menus, samples } = await req.json();
+
+    // オーナーパスワードをDB(rvw_pass_ok)で照合。オーナー以外はAI生成を使えない
+    const supaUrl = Deno.env.get("SUPABASE_URL");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    if (supaUrl && anonKey) {
+      const chk = await fetch(`${supaUrl}/rest/v1/rpc/rvw_pass_ok`, {
+        method: "POST",
+        headers: {
+          apikey: anonKey,
+          Authorization: `Bearer ${anonKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ p_pass: pass ?? "" }),
+      });
+      const ok = chk.ok ? await chk.json() : false;
+      if (ok !== true) {
+        return new Response(JSON.stringify({ error: "password_ng" }), {
+          status: 401,
+          headers: { ...cors, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
     if (!apiKey) {
       return new Response(JSON.stringify({ error: "no_api_key" }), {
