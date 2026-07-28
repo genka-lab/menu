@@ -4192,7 +4192,7 @@ function rvMenuNames(){
   const names=[];
   (typeof items!=='undefined'&&items?items:[]).forEach(i=>{if(i.menu)names.push(i.menu);});
   (typeof recipes!=='undefined'&&recipes?recipes:[]).forEach(r=>{if(r.name&&!names.includes(r.name))names.push(r.name);});
-  return names.slice(0,60);
+  return names.slice(0,150);
 }
 function rvMentionedMenus(body){
   const nb=normJa(body||'');const out=[];
