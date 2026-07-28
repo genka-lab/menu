@@ -4066,14 +4066,16 @@ function renderReviews(){
       body=`<div class="rv_replylabel">✅ OK済みの返信文</div>
         <div class="rv_reply">${esc(rv.reply_final||'')}</div>
         <div class="rv_btns">
-          <button class="btn" onclick="copyReply('${rv.id}')">📋 返信文をコピー</button>
+          <button class="btn" onclick="copyReply('${rv.id}')">① 📋 返信文をコピー</button>
+          <button class="btn" style="background:#4285f4" onclick="openGoogleReply()">② 🌐 Googleの口コミ画面をひらく</button>
+          <button class="btn" style="background:#2fa34f" onclick="markPosted('${rv.id}')">③ ✔ 投稿し終えたら押す（記録用）</button>
           <button class="btn sub" onclick="backToDraft('${rv.id}')">✏️ 書き直す</button>
-          <button class="btn" style="background:#2fa34f" onclick="markPosted('${rv.id}')">✔ Googleに投稿しました</button>
         </div>
-        <div class="rv_small">コピー → Googleマップの「ビジネス」→「クチコミ」→ 返信欄に貼り付け → 投稿したら「✔投稿しました」を押してください。</div>`;
+        <div class="rv_small">⚠️ このアプリからGoogleへ自動投稿はされません。①コピー → ②で開いたGoogleマップ（オーナーのGoogleアカウントでログイン）で該当口コミの「返信」に貼り付けて投稿 → ③でアプリの記録を投稿済みにする、の順です。</div>`;
     }else{
       body=`<div class="rv_replylabel">📮 投稿した返信文</div>
-        <div class="rv_reply">${esc(rv.reply_final||rv.reply_draft||'')}</div>`;
+        <div class="rv_reply">${esc(rv.reply_final||rv.reply_draft||'')}</div>
+        <div class="rv_btns"><button class="btn sub" onclick="unmarkPosted('${rv.id}')">↩ まだ投稿していなかった（投稿してOKに戻す）</button></div>`;
     }
     return `<div class="rvcard st_${st}">
       <div class="rv_head">
@@ -4265,9 +4267,19 @@ async function copyReply(id){
   }
   alert('返信文をコピーしました！\n\nGoogleマップの「ビジネス」→「クチコミ」→ 該当の口コミの「返信」に貼り付けて投稿してください。\n投稿できたら「✔ Googleに投稿しました」を押してください。');
 }
+function openGoogleReply(){
+  window.open('https://www.google.com/maps/place/%E3%81%9F%E3%81%91%E3%81%AE%E3%81%BC%E3%82%8A/@35.7936313,139.7895503,17z/data=!4m8!3m7!1s0x601891007287a431:0x2c4ab50eceea34c0!8m2!3d35.7936313!4d139.7895503!9m1!1b1!16s%2Fg%2F11wnc4c3g9?hl=ja','_blank');
+}
+async function unmarkPosted(id){
+  if(!db||!rvIsOwner())return;
+  const res=await db.rpc('rvw_reply',{p_pass:rvOwnerPass,p_id:id,
+    p_draft:null,p_final:null,p_status:'approved',p_engine:null});
+  if(res.error){if(!rvErr(res.error))alert('戻せませんでした');return;}
+  loadReviews();
+}
 async function markPosted(id){
   if(!db||!rvIsOwner())return;
-  if(!confirm('Googleに投稿しましたか？（投稿済みに移動します）'))return;
+  if(!confirm('確認：このボタンはGoogleには投稿しません（アプリ内の記録だけです）。\n\nGoogleマップでの返信投稿は終わりましたか？'))return;
   const res=await db.rpc('rvw_reply',{p_pass:rvOwnerPass,p_id:id,
     p_draft:null,p_final:null,p_status:'posted',p_engine:null});
   if(res.error){if(!rvErr(res.error))alert('保存に失敗しました');return;}
