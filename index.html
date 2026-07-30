@@ -348,7 +348,14 @@ textarea:focus{border-color:var(--blue);background:#fff}
 .res_loginbtn{width:100%;padding:12px;font-size:14px;font-weight:800;border-radius:12px;
   border:1.5px solid var(--line);background:#fff;color:var(--sub);margin-bottom:12px}
 /* flex指定が .hide に勝ってしまうので打ち消す */
-.res_ownerbar.hide,.res_datebar.hide{display:none}
+.res_ownerbar.hide,.res_datebar.hide,.segbar.hide{display:none}
+.res_daygroup{margin:16px 0 6px;display:flex;align-items:center;gap:8px}
+.res_daygroup .dg_date{font-size:15px;font-weight:800;color:var(--navy)}
+.res_daygroup .dg_sum{font-size:12px;font-weight:700;color:var(--sub)}
+.res_daygroup button{margin-left:auto;flex:0 0 auto;padding:6px 11px;font-size:12px;font-weight:800;
+  border-radius:999px;border:1.5px solid var(--line);background:#fff;color:var(--navy)}
+.res_pastbtn{width:100%;margin-top:10px;padding:10px;font-size:13px;font-weight:800;border-radius:12px;
+  border:1.5px dashed var(--line);background:#fff;color:var(--sub)}
 
 /* ---- シフト（予約の見た目を流用しつつ緑系に） ---- */
 .sftcard{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--green);
@@ -794,6 +801,10 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <button onclick="resLogout()">解除</button>
   </div>
   <button id="resLoginBtn" class="res_loginbtn" onclick="resLogin()">🔑 オーナーの方はこちら（パスワード）</button>
+  <div class="segbar hide" id="resViewSeg">
+    <button id="resViewDayBtn" onclick="setResView('day')">📅 日ごと</button>
+    <button id="resViewListBtn" onclick="setResView('list')">📋 一覧（今日から）</button>
+  </div>
   <div id="resDateBar" class="res_datebar hide">
     <button onclick="resShiftDate(-1)">◀</button>
     <input id="res_date" type="date" onchange="renderReservations()">
@@ -3210,14 +3221,84 @@ function resIsSoon(r,ymd){
   const diff=t-new Date();
   return diff>-1800000&&diff<3600000;
 }
+function resCardHTML(r,day,owner){
+  const chips=[];
+  if(r.seat)chips.push(`<span class="res_chip">${esc(r.seat)}</span>`);
+  if(r.course)chips.push(`<span class="res_chip course">${esc(r.course)}</span>`);
+  return `<div class="rescard${resIsSoon(r,day)?' soon':''}">
+    <div class="res_top">
+      <span class="res_time">${esc((r.start_at||'').slice(0,5)||'時間未定')}</span>
+      ${r.people?`<span class="res_ppl">${+r.people}名</span>`:''}
+      <span class="res_name">${esc(r.guest_name||'（お名前なし）')}</span>
+    </div>
+    ${chips.length?`<div class="res_chips">${chips.join('')}</div>`:''}
+    ${r.note?`<div class="res_note">${esc(r.note)}</div>`:''}
+    ${r.phone?`<a class="res_tel" href="tel:${escA(telHref(r.phone))}">📞 ${esc(r.phone)}</a>`:''}
+    ${owner?`<button class="res_edit" onclick="openResForm('${r.id}')">✏️ 編集する</button>`:''}
+  </div>`;
+}
+/* 一覧モード（オーナーのみ）＝今日以降の全予約を日付ごとにまとめて表示 */
+let resViewMode=localStorage.getItem('res_viewmode')||'day';
+let resListPast=false; // 「過去分も表示」は開くたびにリセット
+function setResView(m){
+  resViewMode=m;localStorage.setItem('res_viewmode',m);
+  if(m==='day')resListPast=false;
+  renderReservations();
+}
+function resTogglePast(){resListPast=!resListPast;renderReservations();}
+/* 一覧モードから日付をタップ→その日の日別表示へ */
+function resOpenDay(ymd){
+  document.getElementById('res_date').value=ymd;
+  setResView('day');
+}
+function renderResListMode(owner){
+  const today=todayStr();
+  const days=[...new Set(reservations.map(r=>r.reserve_on))].sort();
+  const future=days.filter(d=>d>=today), past=days.filter(d=>d<today).reverse();
+  const show=resListPast?future.concat(past):future;
+  const totalPpl=show.reduce((s,d)=>s+resOfDay(d).reduce((a,r)=>a+(+r.people||0),0),0);
+  const totalCnt=show.reduce((s,d)=>s+resOfDay(d).length,0);
+  const todayBar=document.getElementById('resTodayBar');
+  todayBar.classList.remove('hide');
+  todayBar.innerHTML=`📋 ${resListPast?'すべて':'今日から'}の予約 ${totalCnt}件`
+    +(totalCnt?`<span class="sub">${show.length}日分・合計 ${totalPpl}名</span>`:'');
+  document.getElementById('resEmpty').style.display=totalCnt?'none':'block';
+  document.getElementById('resEmpty').textContent=resListPast
+    ?'予約は入っていません。':'今日以降の予約は入っていません。';
+  let html=show.map(d=>{
+    const list=resOfDay(d);
+    const ppl=list.reduce((s,r)=>s+(+r.people||0),0);
+    const isPast=d<today;
+    return `<div class="res_daygroup"${isPast?' style="opacity:.6"':''}>
+        <span class="dg_date">📅 ${resDateLabel(d)}${d===today?'（今日）':''}${isPast?'（済）':''}</span>
+        <span class="dg_sum">${list.length}件${ppl?`・${ppl}名`:''}</span>
+        <button onclick="resOpenDay('${escA(d)}')">この日を開く</button>
+      </div>`+list.map(r=>resCardHTML(r,d,owner)).join('');
+  }).join('');
+  const pastCnt=days.filter(d=>d<today).length;
+  if(pastCnt&&!resListPast)html+=`<button class="res_pastbtn" onclick="resTogglePast()">⏳ 過去の予約も表示（${pastCnt}日分）</button>`;
+  if(resListPast)html+=`<button class="res_pastbtn" onclick="resTogglePast()">過去分を隠す</button>`;
+  document.getElementById('resList').innerHTML=html;
+}
 function renderReservations(){
   updateTabCounts();
   const owner=resIsOwner();
   document.getElementById('resOwnerBar').classList.toggle('hide',!owner);
   document.getElementById('resLoginBtn').classList.toggle('hide',owner);
-  document.getElementById('resDateBar').classList.toggle('hide',!owner);
+  const listMode=owner&&resViewMode==='list';
+  document.getElementById('resViewSeg').classList.toggle('hide',!owner);
+  document.getElementById('resViewDayBtn').classList.toggle('on',owner&&!listMode);
+  document.getElementById('resViewListBtn').classList.toggle('on',listMode);
+  document.getElementById('resDateBar').classList.toggle('hide',!owner||listMode);
   const dateEl=document.getElementById('res_date');
   if(owner&&!dateEl.value)dateEl.value=todayStr();
+  if(listMode){
+    // 一覧モード：仕込みまとめ(日別専用)とロック画面は出さない
+    document.getElementById('resLocked').style.display='none';
+    document.getElementById('resPrep').innerHTML='';
+    renderResListMode(owner);
+    return;
+  }
   const day=owner?(dateEl.value||todayStr()):todayStr();
   const list=resOfDay(day);
   // 16時前はサーバーが本日分を渡さないので list は空になる（＝ロック画面）
@@ -3232,24 +3313,11 @@ function renderReservations(){
   }
   document.getElementById('resLocked').style.display=locked?'block':'none';
   if(locked)document.getElementById('resCountdown').textContent=resWaitLabel();
-  document.getElementById('resEmpty').style.display=(!locked&&!list.length)?'block':'none';
+  const emptyEl=document.getElementById('resEmpty');
+  emptyEl.textContent='この日の予約は入っていません。';
+  emptyEl.style.display=(!locked&&!list.length)?'block':'none';
   document.getElementById('resPrep').innerHTML=locked?'':resPrepHTML(list);
-  document.getElementById('resList').innerHTML=locked?'':list.map(r=>{
-    const chips=[];
-    if(r.seat)chips.push(`<span class="res_chip">${esc(r.seat)}</span>`);
-    if(r.course)chips.push(`<span class="res_chip course">${esc(r.course)}</span>`);
-    return `<div class="rescard${resIsSoon(r,day)?' soon':''}">
-      <div class="res_top">
-        <span class="res_time">${esc((r.start_at||'').slice(0,5)||'時間未定')}</span>
-        ${r.people?`<span class="res_ppl">${+r.people}名</span>`:''}
-        <span class="res_name">${esc(r.guest_name||'（お名前なし）')}</span>
-      </div>
-      ${chips.length?`<div class="res_chips">${chips.join('')}</div>`:''}
-      ${r.note?`<div class="res_note">${esc(r.note)}</div>`:''}
-      ${r.phone?`<a class="res_tel" href="tel:${escA(telHref(r.phone))}">📞 ${esc(r.phone)}</a>`:''}
-      ${owner?`<button class="res_edit" onclick="openResForm('${r.id}')">✏️ 編集する</button>`:''}
-    </div>`;
-  }).join('');
+  document.getElementById('resList').innerHTML=locked?'':list.map(r=>resCardHTML(r,day,owner)).join('');
 }
 function resShiftDate(d){
   const el=document.getElementById('res_date');
