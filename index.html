@@ -356,6 +356,17 @@ textarea:focus{border-color:var(--blue);background:#fff}
   border-radius:999px;border:1.5px solid var(--line);background:#fff;color:var(--navy)}
 .res_pastbtn{width:100%;margin-top:10px;padding:10px;font-size:13px;font-weight:800;border-radius:12px;
   border:1.5px dashed var(--line);background:#fff;color:var(--sub)}
+/* 予約⇄シフトの相互表示カード */
+.xlink{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:12px}
+.xlink.sft{border-left:6px solid var(--green)}
+.xlink.res{border-left:6px solid var(--blue)}
+.xl_head{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;color:var(--navy)}
+.xl_head button{margin-left:auto;flex:0 0 auto;padding:6px 11px;font-size:12px;font-weight:800;
+  border-radius:999px;border:1.5px solid var(--line);background:#fff;color:var(--navy);white-space:nowrap}
+.xl_row{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:13px;padding:6px 0 2px;
+  border-top:1px dashed var(--line);margin-top:6px}
+.xl_time{font-weight:800;color:var(--blue);flex:0 0 auto}
+.xl_none{font-size:12px;color:var(--sub);margin-top:6px;border-top:1px dashed var(--line);padding-top:6px}
 
 /* ---- シフト（予約の見た目を流用しつつ緑系に） ---- */
 .sftcard{background:var(--card);border:1px solid var(--line);border-left:6px solid var(--green);
@@ -812,6 +823,8 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <button onclick="resGoToday()">今日</button>
   </div>
   <div id="resTodayBar" class="res_today hide"></div>
+  <!-- 同じ日のシフト（出勤）を小さく表示＝シフトタブへジャンプ可 -->
+  <div id="resXlink"></div>
   <!-- コース予約から自動計算する「この日の仕込みまとめ」 -->
   <div id="resPrep"></div>
   <div id="resList"></div>
@@ -881,6 +894,8 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <button onclick="sftGoToday()">今日</button>
   </div>
   <div id="sftTodayBar" class="res_today hide"></div>
+  <!-- 同じ日の予約を小さく表示＝予約タブへジャンプ可 -->
+  <div id="sftXlink"></div>
   <div id="sftList"></div>
   <div id="sftLocked" class="res_lockbox" style="display:none">
     <div class="ic">🔒</div>
@@ -3180,6 +3195,7 @@ async function loadReservations(){
       setResConn('on','🟢 オーナーモード（すべての日程の予約が見えます）');
       renderReservations();
       renderBeerBar();
+      if(currentTab==='shift')renderShifts(); // シフトタブの「この日の予約」カードも更新
       return;
     }
     console.error(r.error);
@@ -3200,6 +3216,7 @@ async function loadReservations(){
   reservations=r.data||[];
   setResConn('on',`🟢 オンライン共有中（本日の予約は${RES_OPEN_HOUR}時に公開）`);
   renderReservations();
+  if(currentTab==='shift')renderShifts(); // シフトタブの「この日の予約」カードも更新
 }
 /* その日の予約を時間順に */
 function resOfDay(ymd){
@@ -3251,6 +3268,58 @@ function resOpenDay(ymd){
   document.getElementById('res_date').value=ymd;
   setResView('day');
 }
+/* ============================================================
+   予約⇄シフトの相互表示
+   ・予約タブに「この日の出勤」、シフトタブに「この日の予約」を小さく表示
+   ・データは既に読込済みの shifts / reservations をそのまま使う
+     （バイトはRLSで本日16時以降の分しか届かないので勝手に隠れる）
+   ============================================================ */
+function xlinkShiftHTML(day){
+  const list=sftOfDay(day);
+  let body;
+  if(list.length){
+    body=list.map(s=>{
+      const st=(s.start_at||'').slice(0,5), en=(s.end_at||'').slice(0,5);
+      return `<div class="xl_row"><span class="xl_time">${st?esc(st)+(en?'〜'+esc(en):'〜'):'時間未定'}</span>${roleChips(s.role)}<span>${esc(s.staff_name||'（名前なし）')}</span></div>`;
+    }).join('');
+  }else if(day!==todayStr()&&!sftIsOwner()){
+    body=`<div class="xl_none">この日の出勤を見るには、シフトタブでオーナーパスワードを入れてください。</div>`;
+  }else{
+    body=`<div class="xl_none">出勤の登録はありません。</div>`;
+  }
+  return `<div class="xlink sft"><div class="xl_head">🗓 この日の出勤${list.length?` ${list.length}名`:''}
+    <button onclick="jumpToShift('${escA(day)}')">シフトタブへ ▶</button></div>${body}</div>`;
+}
+function xlinkResHTML(day){
+  const list=resOfDay(day);
+  let body;
+  if(list.length){
+    body=list.map(r=>`<div class="xl_row"><span class="xl_time">${esc((r.start_at||'').slice(0,5)||'時間未定')}</span>${r.people?`<span class="res_ppl">${+r.people}名</span>`:''}<span>${esc(r.guest_name||'（お名前なし）')}様</span>${r.course?`<span class="res_chip course">${esc(r.course)}</span>`:''}</div>`).join('');
+  }else if(day!==todayStr()&&!resIsOwner()){
+    body=`<div class="xl_none">この日の予約を見るには、予約タブでオーナーパスワードを入れてください。</div>`;
+  }else{
+    body=`<div class="xl_none">予約は入っていません。</div>`;
+  }
+  const ppl=list.reduce((s,r)=>s+(+r.people||0),0);
+  return `<div class="xlink res"><div class="xl_head">📅 この日の予約${list.length?` ${list.length}件${ppl?`・${ppl}名`:''}`:''}
+    <button onclick="jumpToReserve('${escA(day)}')">予約タブへ ▶</button></div>${body}</div>`;
+}
+/* 相互ジャンプ（オーナーなら日付も同期。バイトはRLSで本日分のみなのでそのまま移動） */
+function jumpToShift(ymd){
+  if(sftIsOwner()){
+    const sel=document.getElementById('sftStaffFilter');
+    if(sel)sel.value=''; // 人絞り込み中でも日付ビューに戻す
+    document.getElementById('sft_date').value=ymd;
+  }
+  switchTab('shift');
+}
+function jumpToReserve(ymd){
+  if(resIsOwner()){
+    document.getElementById('res_date').value=ymd;
+    resViewMode='day';localStorage.setItem('res_viewmode','day'); // 一覧モード中でもその日の日別へ
+  }
+  switchTab('reserve');
+}
 function renderResListMode(owner){
   const today=todayStr();
   const days=[...new Set(reservations.map(r=>r.reserve_on))].sort();
@@ -3293,9 +3362,10 @@ function renderReservations(){
   const dateEl=document.getElementById('res_date');
   if(owner&&!dateEl.value)dateEl.value=todayStr();
   if(listMode){
-    // 一覧モード：仕込みまとめ(日別専用)とロック画面は出さない
+    // 一覧モード：仕込みまとめ・出勤カード(日別専用)とロック画面は出さない
     document.getElementById('resLocked').style.display='none';
     document.getElementById('resPrep').innerHTML='';
+    document.getElementById('resXlink').innerHTML='';
     renderResListMode(owner);
     return;
   }
@@ -3316,6 +3386,7 @@ function renderReservations(){
   const emptyEl=document.getElementById('resEmpty');
   emptyEl.textContent='この日の予約は入っていません。';
   emptyEl.style.display=(!locked&&!list.length)?'block':'none';
+  document.getElementById('resXlink').innerHTML=locked?'':xlinkShiftHTML(day);
   document.getElementById('resPrep').innerHTML=locked?'':resPrepHTML(list);
   document.getElementById('resList').innerHTML=locked?'':list.map(r=>resCardHTML(r,day,owner)).join('');
 }
@@ -3594,6 +3665,7 @@ async function loadShifts(){
       shifts=r.data||[];
       setSftConn('on','🟢 オーナーモード（すべての日程のシフトが見えます）');
       renderShifts();
+      if(currentTab==='reserve')renderReservations(); // 予約タブの「この日の出勤」カードも更新
       return;
     }
     console.error(r.error);
@@ -3613,6 +3685,7 @@ async function loadShifts(){
   shifts=r.data||[];
   setSftConn('on',`🟢 オンライン共有中（本日のシフトは${SFT_OPEN_HOUR}時に公開）`);
   renderShifts();
+  if(currentTab==='reserve')renderReservations(); // 予約タブの「この日の出勤」カードも更新
 }
 /* その日のシフトを出勤時間順に */
 function sftOfDay(ymd){
@@ -3828,6 +3901,8 @@ function renderShifts(){
   }
   document.getElementById('sftLocked').style.display=locked?'block':'none';
   if(locked)document.getElementById('sftCountdown').textContent=sftWaitLabel();
+  // 同じ日の予約カード（人で絞り込み中は日付が定まらないので出さない）
+  document.getElementById('sftXlink').innerHTML=(locked||personMode)?'':xlinkResHTML(day);
   document.getElementById('sftEmpty').style.display=(!locked&&!list.length)?'block':'none';
   document.getElementById('sftList').innerHTML=locked?'':list.map(s=>{
     const st=(s.start_at||'').slice(0,5), en=(s.end_at||'').slice(0,5);
