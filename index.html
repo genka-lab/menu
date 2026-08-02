@@ -392,6 +392,12 @@ textarea:focus{border-color:var(--blue);background:#fff}
 /* シフト役割チップ */
 .sft_role{display:inline-block;font-size:11px;font-weight:800;padding:2px 9px;border-radius:999px;background:#eef1f5;color:var(--sub);margin-right:7px;vertical-align:2px;white-space:nowrap}
 .sft_role.subr{background:#fff;border:1.5px solid var(--line)}
+/* 欠勤（本来出勤のはずが休みになった記録） */
+.sftcard.absent{border-left-color:#d64545;background:#fff6f6}
+.sftcard.absent .sft_time{color:#b0b6bf;text-decoration:line-through}
+.sftcard.absent .sft_name{color:#8a94a3}
+.sft_abs{display:inline-block;font-size:11px;font-weight:800;padding:2px 9px;border-radius:999px;background:#fde3e3;color:#c0392b;margin-right:7px;vertical-align:2px;white-space:nowrap}
+.rolepick button.abs.on{background:#c0392b;border-color:#c0392b;color:#fff}
 /* 役割のチェック式ピッカー（シフトフォーム） */
 .rolepick{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}
 .rolepick button{padding:10px 16px;font-size:14px;font-weight:700;border-radius:999px;border:1.5px solid var(--line);background:#fff;color:var(--sub)}
@@ -925,6 +931,12 @@ textarea:focus{border-color:var(--blue);background:#fff}
     </div>
     <label>メモ（任意・ホール／キッチン等）</label>
     <input id="shf_note" placeholder="例：ホール">
+    <label>🚫 勤怠（本来出勤のはずが休みになったら「欠勤」に）</label>
+    <div class="rolepick" id="shf_abs_bar"></div>
+    <div id="shf_abs_reasonbox" class="hide">
+      <label>欠勤の理由（任意）</label>
+      <select id="shf_abs_reason" onchange="draftShiftAbs.reason=this.value"></select>
+    </div>
     <button class="btn" onclick="saveShift()">保存する</button>
     <button class="btn sub" onclick="showPage('shift')">キャンセル</button>
     <button class="btn danger hide" id="sftDelBtn" onclick="deleteShift()">この出勤を削除</button>
@@ -3280,14 +3292,16 @@ function xlinkShiftHTML(day){
   if(list.length){
     body=list.map(s=>{
       const st=(s.start_at||'').slice(0,5), en=(s.end_at||'').slice(0,5);
-      return `<div class="xl_row"><span class="xl_time">${st?esc(st)+(en?'〜'+esc(en):'〜'):'時間未定'}</span>${roleChips(s.role)}<span>${esc(s.staff_name||'（名前なし）')}</span></div>`;
+      const absent=sftAbsParse(s.absence).on;
+      return `<div class="xl_row"><span class="xl_time"${absent?' style="color:#b0b6bf;text-decoration:line-through"':''}>${st?esc(st)+(en?'〜'+esc(en):'〜'):'時間未定'}</span>${sftAbsChip(s.absence)}${roleChips(s.role)}<span${absent?' style="color:#8a94a3"':''}>${esc(s.staff_name||'（名前なし）')}</span></div>`;
     }).join('');
   }else if(day!==todayStr()&&!sftIsOwner()){
     body=`<div class="xl_none">この日の出勤を見るには、シフトタブでオーナーパスワードを入れてください。</div>`;
   }else{
     body=`<div class="xl_none">出勤の登録はありません。</div>`;
   }
-  return `<div class="xlink sft"><div class="xl_head">🗓 この日の出勤${list.length?` ${list.length}名`:''}
+  const absCnt=list.filter(s=>sftAbsParse(s.absence).on).length;
+  return `<div class="xlink sft"><div class="xl_head">🗓 この日の出勤${list.length?` ${list.length-absCnt}名${absCnt?`（欠勤${absCnt}名）`:''}`:''}
     <button onclick="jumpToShift('${escA(day)}')">シフトタブへ ▶</button></div>${body}</div>`;
 }
 function xlinkResHTML(day){
@@ -3755,6 +3769,34 @@ function toggleShfSub(n){
   if(i>=0)draftShiftRole.s.splice(i,1);else draftShiftRole.s.push(n);
   renderShfRoleUI();
 }
+/* ---- 欠勤（勤怠）。absence列: 空=出勤 / 理由文字列（理由なしは「欠勤」）で欠勤 ---- */
+const SFT_ABS_REASONS=['体調不良','家庭の事情','私用','無断欠勤','その他'];
+let draftShiftAbs={on:false,reason:''};
+function sftAbsParse(v){
+  v=String(v||'').trim();
+  return{on:!!v,reason:(v&&v!=='欠勤')?v:''};
+}
+function sftAbsChip(v){
+  const a=sftAbsParse(v);
+  if(!a.on)return'';
+  return `<span class="sft_abs">🚫欠勤${a.reason?`（${esc(a.reason)}）`:''}</span>`;
+}
+function renderShfAbsUI(){
+  document.getElementById('shf_abs_bar').innerHTML=
+    `<button type="button" class="${!draftShiftAbs.on?'on':''}" onclick="setShfAbs(false)">✅ 出勤</button>`+
+    `<button type="button" class="abs ${draftShiftAbs.on?'on':''}" onclick="setShfAbs(true)">🚫 欠勤</button>`;
+  document.getElementById('shf_abs_reasonbox').classList.toggle('hide',!draftShiftAbs.on);
+  if(draftShiftAbs.on){
+    document.getElementById('shf_abs_reason').innerHTML=
+      `<option value="">（理由を選ぶ・任意）</option>`+
+      SFT_ABS_REASONS.map(r=>`<option${r===draftShiftAbs.reason?' selected':''}>${esc(r)}</option>`).join('');
+  }
+}
+function setShfAbs(on){draftShiftAbs.on=on;if(!on)draftShiftAbs.reason='';renderShfAbsUI();}
+function shfAbsValue(){
+  if(!draftShiftAbs.on)return'';
+  return (document.getElementById('shf_abs_reason').value||'').trim()||'欠勤';
+}
 /* ---- スタッフ名簿（登録した名前を出勤追加のプルダウンに出す） ---- */
 let staffList=[];
 async function loadStaff(){
@@ -3890,9 +3932,12 @@ function renderShifts(){
   const todayBar=document.getElementById('sftTodayBar');
   todayBar.classList.toggle('hide',locked);
   if(!locked){
-    const cnt=sftRoleFilter?`${list.length}名（${esc(sftRoleFilter)}）`:`${fullList.length}名`;
+    const absCnt=fullList.filter(s=>sftAbsParse(s.absence).on).length;
+    const actCnt=fullList.length-absCnt;
+    const cnt=sftRoleFilter?`${list.length}名（${esc(sftRoleFilter)}）`
+      :`${actCnt}名${absCnt?`（ほか欠勤${absCnt}名）`:''}`;
     if(personMode){
-      todayBar.innerHTML=`👤 ${esc(filterName)} さんの出勤 ${fullList.length}件`;
+      todayBar.innerHTML=`👤 ${esc(filterName)} さんの出勤 ${actCnt}件${absCnt?`（欠勤${absCnt}件）`:''}`;
     }else if(owner){
       todayBar.innerHTML=`🗓 ${resDateLabel(day)} の出勤 ${cnt}`;
     }else{
@@ -3909,11 +3954,12 @@ function renderShifts(){
     const time=st?`${esc(st)}${en?`<span class="to">〜${esc(en)}</span>`:'〜'}`:'時間未定';
     // 人で絞り込み中は各行に日付＋曜日を出す
     const datePrefix=personMode?`<span class="sft_date">${resDateLabel(s.work_on)}</span>`:'';
-    return `<div class="sftcard">
+    const absent=sftAbsParse(s.absence).on;
+    return `<div class="sftcard${absent?' absent':''}">
       ${datePrefix}
       <span class="sft_time">${time}</span>
       <span class="sft_who">
-        <span class="sft_name">${roleChips(s.role)}${esc(s.staff_name||'（名前なし）')}</span>
+        <span class="sft_name">${sftAbsChip(s.absence)}${roleChips(s.role)}${esc(s.staff_name||'（名前なし）')}</span>
         ${s.note?`<span class="sft_note">${esc(s.note)}</span>`:''}
       </span>
       ${owner?`<button class="sft_edit" onclick="openShiftForm('${s.id}')">✏️</button>`:''}
@@ -3966,6 +4012,8 @@ function openShiftForm(id){
   renderShfNameUI(s?s.staff_name:'');
   draftShiftRole=sftRoleParse(s?s.role:'');
   renderShfRoleUI();
+  draftShiftAbs=sftAbsParse(s?s.absence:'');
+  renderShfAbsUI();
   shf_start.value=s?(s.start_at||'').slice(0,5):'';
   shf_end.value=s?(s.end_at||'').slice(0,5):'';
   shf_note.value=s?s.note:'';
@@ -3981,13 +4029,16 @@ async function saveShift(){
   const r=await db.rpc('sft_save',{
     p_pass:sftOwnerPass, p_id:sftEditId, p_on:shf_date.value,
     p_name:staffName, p_start:shf_start.value||'', p_end:shf_end.value||'',
-    p_note:shf_note.value.trim(), p_role:sftRoleStringify(draftShiftRole)
+    p_note:shf_note.value.trim(), p_role:sftRoleStringify(draftShiftRole),
+    p_absence:shfAbsValue()
   });
   showSaving(false);
   if(r.error){
     console.error(r.error);
+    const m=String(r.error.message||'');
     alert(resIsPassErr(r.error)?'オーナーパスワードが変わっています。もう一度ログインしてください。'
-                              :'保存に失敗しました：'+(r.error.message||r.error));
+        :(m.includes('sft_save'))?'保存に失敗しました。\nSupabaseで supabase_shift_absence.sql を実行してください（欠勤機能の反映）。'
+        :'保存に失敗しました：'+m);
     return;
   }
   document.getElementById('sft_date').value=shf_date.value;

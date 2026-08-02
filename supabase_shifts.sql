@@ -23,13 +23,15 @@ create table if not exists inv_shifts (
   start_at   text        not null default '',      -- from what time, e.g. 17:00
   end_at     text        not null default '',      -- until (optional)
   note       text        not null default '',      -- free memo (optional)
-  role       text        not null default '',      -- 役割 (ホール/キッチン/カウンター etc.)
+  role       text        not null default '',      -- role (hall / kitchen / counter etc.)
+  absence    text        not null default '',      -- '' = works. non-empty = absent (text = reason)
   updated_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
 
--- 既存テーブルに後から役割列を足す場合もこの1行でOK（何度実行しても安全）
+-- Adding the columns to an existing table is also safe (re-runnable):
 alter table inv_shifts add column if not exists role text not null default '';
+alter table inv_shifts add column if not exists absence text not null default '';
 
 create index if not exists inv_shifts_on_idx on inv_shifts(work_on);
 
@@ -73,15 +75,17 @@ end $$;
 -- Owner: add (p_id null) or edit (p_id given) a shift
 -- ------------------------------------------------------------
 drop function if exists sft_save(text,uuid,date,text,text,text,text);
+drop function if exists sft_save(text,uuid,date,text,text,text,text,text);
 create or replace function sft_save(
-  p_pass  text,
-  p_id    uuid,
-  p_on    date,
-  p_name  text,
-  p_start text,
-  p_end   text,
-  p_note  text,
-  p_role  text
+  p_pass    text,
+  p_id      uuid,
+  p_on      date,
+  p_name    text,
+  p_start   text,
+  p_end     text,
+  p_note    text,
+  p_role    text,
+  p_absence text
 ) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare v_id uuid;
@@ -94,13 +98,15 @@ begin
     raise exception 'date_required';
   end if;
   if p_id is null then
-    insert into inv_shifts(work_on,staff_name,start_at,end_at,note,role)
-    values(p_on,coalesce(p_name,''),coalesce(p_start,''),coalesce(p_end,''),coalesce(p_note,''),coalesce(p_role,''))
+    insert into inv_shifts(work_on,staff_name,start_at,end_at,note,role,absence)
+    values(p_on,coalesce(p_name,''),coalesce(p_start,''),coalesce(p_end,''),
+           coalesce(p_note,''),coalesce(p_role,''),coalesce(p_absence,''))
     returning id into v_id;
   else
     update inv_shifts set
       work_on=p_on, staff_name=coalesce(p_name,''), start_at=coalesce(p_start,''),
-      end_at=coalesce(p_end,''), note=coalesce(p_note,''), role=coalesce(p_role,''), updated_at=now()
+      end_at=coalesce(p_end,''), note=coalesce(p_note,''), role=coalesce(p_role,''),
+      absence=coalesce(p_absence,''), updated_at=now()
     where id=p_id
     returning id into v_id;
   end if;
