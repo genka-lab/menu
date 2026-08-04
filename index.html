@@ -661,6 +661,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
   <div class="sortbar">
     <button id="sortKana" onclick="setRecipeSort('kana')">あいうえお順</button>
     <button id="sortManual" onclick="setRecipeSort('manual')">自分で並べる</button>
+    <button id="rSortReorder" onclick="toggleRecipeReorder()">⇅ 並べ替え</button>
   </div>
   <input id="rSearch" placeholder="🔍 メニュー名・食材で検索（一部だけでOK）" oninput="renderRecipes()" style="margin-bottom:12px">
   <div id="recipeList"></div>
@@ -1650,7 +1651,14 @@ async function loadRecipes(){
   setRConn('on','🟢 オンライン共有中（レシピは全員で共有）');
   renderRecipes();
 }
-function setRecipeSort(m){recipeSort=m;localStorage.setItem('recipe_sortmode',m);renderRecipes();}
+function setRecipeSort(m){recipeSort=m;recipeReorder=false;localStorage.setItem('recipe_sortmode',m);renderRecipes();}
+let recipeReorder=false; // ⇅ 並べ替えモード（名前だけのコンパクト表示）
+function toggleRecipeReorder(){
+  recipeReorder=!recipeReorder;
+  if(recipeReorder){recipeSort='manual';localStorage.setItem('recipe_sortmode','manual');} // 並べ替え＝手動順が前提
+  renderRecipes();
+  if(recipeReorder)window.scrollTo(0,0);
+}
 function sortedRecipes(){
   const list=[...recipes];
   if(recipeSort==='manual'){
@@ -1684,15 +1692,30 @@ function renderRecipes(){
       cats.map(c=>`<button class="${recipeSubcat===c?'on':''}" onclick="setRecipeSubcat('${c}')">${c}（${nOf(c)}）</button>`).join('')+
       (nNone?`<button class="${recipeSubcat==='none'?'on':''}" onclick="setRecipeSubcat('none')">未分類（${nNone}）</button>`:'');
   }
-  document.getElementById('sortKana').classList.toggle('on',recipeSort==='kana');
-  document.getElementById('sortManual').classList.toggle('on',recipeSort==='manual');
+  document.getElementById('sortKana').classList.toggle('on',recipeSort==='kana'&&!recipeReorder);
+  document.getElementById('sortManual').classList.toggle('on',recipeSort==='manual'&&!recipeReorder);
+  const rrb=document.getElementById('rSortReorder');
+  if(rrb){rrb.classList.toggle('on',recipeReorder);rrb.textContent=recipeReorder?'✔ 並べ替え完了':'⇅ 並べ替え';}
   document.getElementById('recipeEmpty').style.display=recipes.length?'none':'block';
   const q=normJa(document.getElementById('rSearch').value);
   let list=sortedRecipes().filter(r=>recipeTypeOf(r)===recipeCat);
   if(recipeSubcat==='none')list=list.filter(r=>!(r.category||''));
   else if(recipeSubcat!=='all')list=list.filter(r=>(r.category||'')===recipeSubcat);
+  // ⇅ 並べ替えモード＝名前だけのコンパクト一覧（カテゴリーで絞り込んだままでも並べ替えOK）
+  if(recipeReorder){
+    document.getElementById('recipeList').innerHTML=
+      '<div class="note" style="margin:0 0 8px">▲▼で順番を入れ替えて、終わったら上の「✔ 並べ替え完了」を押してください。上のカテゴリーで絞り込んだまま並べ替えもできます。</div>'+
+      (list.length?list.map((r,i)=>`<div class="reo">
+        <span class="no">${i+1}</span><span class="nm">${esc(r.name)}${r.category?`<span class="catchip">${esc(r.category)}</span>`:''}</span>
+        <span class="mv">
+          <button onclick="moveRecipe('${r.id}',-1)" ${i===0?'disabled':''}>▲</button>
+          <button onclick="moveRecipe('${r.id}',1)" ${i===list.length-1?'disabled':''}>▼</button>
+        </span>
+      </div>`).join(''):'<div class="empty">このカテゴリーのレシピはまだありません。</div>');
+    return;
+  }
   if(q)list=list.filter(r=>normJa([r.name,r.yomi,r.category,r.steps,r.seasoning,r.garnish].join(' ')).includes(q));
-  const manual=recipeSort==='manual'&&!q&&recipeSubcat==='all'; // 並べ替えは「すべて」表示のときだけ（部分表示中は順番が壊れるため）
+  const manual=recipeSort==='manual'&&!q; // moveRecipeが絞り込み対応になったのでカテゴリー表示中も▲▼OK
   if(q&&list.length===0&&recipes.length){
     document.getElementById('recipeList').innerHTML='<div class="empty">「'+esc(document.getElementById('rSearch').value.trim())+'」に一致するレシピはありません。</div>';
     return;
@@ -1724,14 +1747,24 @@ function renderRecipes(){
 }
 async function moveRecipe(id,dir){
   if(!db)return;
-  // 並べ替えは表示中のカテゴリ（フード/ドリンク）の中だけで行う
-  const list=sortedRecipes().filter(r=>recipeTypeOf(r)===recipeCat);
+  // フード/ドリンク内の全体並び（手動順）に通し番号を振り直してから、
+  // 表示中（カテゴリー絞り込み中でもOK）の隣とだけ番号を交換する
+  // → 絞り込み表示で動かしても、他のカテゴリーの品の順番は崩れない
+  const full=[...recipes].filter(r=>recipeTypeOf(r)===recipeCat)
+    .sort((a,b)=>((a.sort_order||0)-(b.sort_order||0))||((a.yomi||a.name)).localeCompare((b.yomi||b.name),'ja'));
+  full.forEach((r,idx)=>r._ord=(idx+1)*10);
+  let list=full;
+  if(recipeSubcat==='none')list=full.filter(r=>!(r.category||''));
+  else if(recipeSubcat!=='all')list=full.filter(r=>(r.category||'')===recipeSubcat);
   const i=list.findIndex(r=>r.id===id), j=i+dir;
-  if(j<0||j>=list.length)return;
-  [list[i],list[j]]=[list[j],list[i]];
-  await Promise.all(list.map((r,idx)=>{r.sort_order=(idx+1)*10;
-    return db.from('inv_recipes').update({sort_order:r.sort_order}).eq('id',r.id);}));
-  renderRecipes();loadRecipes();
+  if(i<0||j<0||j>=list.length)return;
+  const t=list[i]._ord;list[i]._ord=list[j]._ord;list[j]._ord=t;
+  const changed=full.filter(r=>(r.sort_order||0)!==r._ord);
+  changed.forEach(r=>{r.sort_order=r._ord;delete r._ord;});
+  full.forEach(r=>delete r._ord);
+  renderRecipes();
+  await Promise.all(changed.map(r=>db.from('inv_recipes').update({sort_order:r.sort_order}).eq('id',r.id)));
+  loadRecipes();
 }
 function lightbox(url){document.getElementById('lightboxImg').src=url;document.getElementById('lightbox').style.display='flex';}
 function openRecipeDetail(id){
