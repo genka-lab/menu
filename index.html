@@ -475,6 +475,19 @@ textarea:focus{border-color:var(--blue);background:#fff}
 .svrow select{flex:1 1 45%;padding:9px 8px;font-size:13px;background:#fff}
 .svchip{display:inline-block;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;background:#eef1f5;color:var(--sub);margin-left:5px;white-space:nowrap;vertical-align:1px}
 .svchip.on{background:#e2efda;color:var(--green)}
+/* コース編集：品の並び替え▲▼ */
+.pickrow .mvc{flex:0 0 auto;display:inline-flex;gap:4px}
+.pickrow .mvc button{width:32px;height:32px;padding:0;border-radius:8px;border:1.5px solid var(--line);background:#fff;color:var(--navy);font-size:13px;font-weight:700}
+.pickrow .mvc button:disabled{opacity:.3}
+/* レシピのカテゴリーバッジ */
+.catchip{display:inline-block;font-size:10px;font-weight:800;padding:1px 7px;border-radius:999px;background:#fdeedd;color:var(--orange);margin-left:6px;white-space:nowrap;vertical-align:2px}
+/* メニューの⇅並べ替えモード（名前だけのコンパクト行） */
+.reo{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px;margin-bottom:6px}
+.reo .no{flex:0 0 26px;text-align:center;font-size:12px;font-weight:800;color:var(--sub)}
+.reo .nm{flex:1;font-size:14px;font-weight:700;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reo .mv{flex:0 0 auto;display:inline-flex;gap:6px}
+.reo .mv button{width:40px;height:34px;border-radius:8px;border:1.5px solid var(--line);background:#fff;color:var(--navy);font-size:14px;font-weight:700}
+.reo .mv button:disabled{opacity:.3}
 /* コース編集中の画面下・集計バー */
 .crsbar{position:fixed;left:14px;right:14px;bottom:16px;z-index:31;background:var(--navy);color:#fff;
   border-radius:14px;padding:11px 16px;box-shadow:0 4px 14px rgba(31,59,87,.45);
@@ -644,6 +657,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
 <div id="tab-recipe" class="wrap hide">
   <div id="rConnBar" class="conn off">接続中…</div>
   <div class="segbar" id="recipeSeg"></div>
+  <div class="segbar" id="recipeCatBar" style="margin-top:-6px"></div>
   <div class="sortbar">
     <button id="sortKana" onclick="setRecipeSort('kana')">あいうえお順</button>
     <button id="sortManual" onclick="setRecipeSort('manual')">自分で並べる</button>
@@ -672,10 +686,14 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <div class="note">空欄でもOK。入れると「あいうえお順」で正しく並びます。</div>
 
     <label>種別</label>
-    <select id="rf_type">
+    <select id="rf_type" onchange="fillRecipeCatSel(this.value,document.getElementById('rf_cat').value)">
       <option value="food">🍳 フード</option>
       <option value="drink">🍹 ドリンク</option>
     </select>
+
+    <label>カテゴリー</label>
+    <select id="rf_cat"></select>
+    <div class="note">カテゴリーを選ぶと、一覧でカテゴリー別の絞り込み・検索ができます。</div>
 
     <label>調理手順（湯せん◯分・揚げ◯分など。改行OK）</label>
     <textarea id="rf_steps" placeholder="例：&#10;1. 冷凍のまま170℃で4分揚げる&#10;2. 油を切って皿に盛る"></textarea>
@@ -706,6 +724,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
   <div class="sortbar" id="menuSortbar" style="display:none">
     <button id="mSortKana" onclick="setMenuSort('kana')">あいうえお順</button>
     <button id="mSortManual" onclick="setMenuSort('manual')">自分で並べる</button>
+    <button id="mSortReorder" onclick="toggleMenuReorder()">⇅ 並べ替え</button>
   </div>
   <div id="menuSummary" style="display:none"></div>
   <button class="btn sub" id="exportBtn" style="margin-top:0;margin-bottom:12px" onclick="exportCSV()">📊 エクセル(CSV)で出力</button>
@@ -994,6 +1013,10 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <input id="f_menu" placeholder="例：唐揚げ定食">
     <label>メニュー売価（税込・円）</label>
     <input id="f_price" type="number" inputmode="decimal" placeholder="880" oninput="recalcForm()">
+
+    <label>1人前の量（g）を手動で入力（空欄＝食材から自動計算）</label>
+    <input id="f_manual_g" type="number" inputmode="decimal" placeholder="例：250" oninput="recalcForm()">
+    <div class="note" id="f_gram_note"></div>
 
     <h2 class="sec" style="margin-top:18px">使う食材（何個でも追加OK）</h2>
     <div id="ingContainer"></div>
@@ -1597,8 +1620,25 @@ const normJa=s=>String(s||'').toLowerCase().replace(/[ァ-ヶ]/g,c=>String.fromC
 let recipes=[], recipeSort=localStorage.getItem('recipe_sortmode')||'kana';
 let recipeCat=localStorage.getItem('recipe_cat')||'food';   // food=フード / drink=ドリンク
 let draftRecipe=null, recipeEditId=null;
+let recipeHasCategory=true; // DBにcategory列があるか（無ければ supabase_update_20260805.sql 未実行）
+/* カテゴリー一覧（フード/ドリンクで別） */
+const RCATS={
+  food:['揚げ物','おつまみ','〆','デザート','サラダ','ポテト'],
+  drink:['ビール','ワイン','焼酎','ウイスキー','日本酒','カクテル','果実酒','サワー','ソフトドリンク','ノンアルコール']
+};
+let recipeSubcat=localStorage.getItem('recipe_subcat')||'all'; // all=すべて / none=未分類 / カテゴリー名
 function recipeTypeOf(r){return (r.rtype||'food')==='drink'?'drink':'food';}
-function setRecipeCat(k){recipeCat=k;localStorage.setItem('recipe_cat',k);renderRecipes();}
+function setRecipeCat(k){recipeCat=k;localStorage.setItem('recipe_cat',k);
+  recipeSubcat='all';localStorage.setItem('recipe_subcat','all'); // 種別を切り替えたらカテゴリー絞り込みは解除
+  renderRecipes();}
+function setRecipeSubcat(k){recipeSubcat=k;localStorage.setItem('recipe_subcat',k);renderRecipes();}
+/* レシピフォームのカテゴリー選択肢（種別に合わせて入れ替え） */
+function fillRecipeCatSel(type,val){
+  const sel=document.getElementById('rf_cat');if(!sel)return;
+  const cats=RCATS[type==='drink'?'drink':'food'];
+  sel.innerHTML=`<option value="">未分類</option>`+cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  sel.value=cats.includes(val)?val:'';
+}
 
 function setRConn(cls,text){const b=document.getElementById('rConnBar');b.className='conn '+cls;b.textContent=text;}
 async function loadRecipes(){
@@ -1606,6 +1646,7 @@ async function loadRecipes(){
   const r=await db.from('inv_recipes').select('*');
   if(r.error){console.error(r.error);setRConn('err','レシピ表が未作成です（recipesのSQLを実行してください）');return;}
   recipes=r.data||[];
+  if(recipes.length)recipeHasCategory=('category' in recipes[0]);
   setRConn('on','🟢 オンライン共有中（レシピは全員で共有）');
   renderRecipes();
 }
@@ -1630,21 +1671,38 @@ function renderRecipes(){
       `<button class="${recipeCat==='food'?'on':''}" onclick="setRecipeCat('food')">🍳 フード（${nFood}）</button>`+
       `<button class="${recipeCat==='drink'?'on':''}" onclick="setRecipeCat('drink')">🍹 ドリンク（${nDrink}）</button>`;
   }
+  // カテゴリーの絞り込みチップ（フード/ドリンクで中身が変わる）
+  const cats=RCATS[recipeCat]||[];
+  if(recipeSubcat!=='all'&&recipeSubcat!=='none'&&!cats.includes(recipeSubcat))recipeSubcat='all';
+  const cb=document.getElementById('recipeCatBar');
+  if(cb){
+    const inType=recipes.filter(r=>recipeTypeOf(r)===recipeCat);
+    const nOf=c=>inType.filter(r=>(r.category||'')===c).length;
+    const nNone=inType.filter(r=>!(r.category||'')).length;
+    cb.innerHTML=
+      `<button class="${recipeSubcat==='all'?'on':''}" onclick="setRecipeSubcat('all')">すべて（${inType.length}）</button>`+
+      cats.map(c=>`<button class="${recipeSubcat===c?'on':''}" onclick="setRecipeSubcat('${c}')">${c}（${nOf(c)}）</button>`).join('')+
+      (nNone?`<button class="${recipeSubcat==='none'?'on':''}" onclick="setRecipeSubcat('none')">未分類（${nNone}）</button>`:'');
+  }
   document.getElementById('sortKana').classList.toggle('on',recipeSort==='kana');
   document.getElementById('sortManual').classList.toggle('on',recipeSort==='manual');
   document.getElementById('recipeEmpty').style.display=recipes.length?'none':'block';
   const q=normJa(document.getElementById('rSearch').value);
   let list=sortedRecipes().filter(r=>recipeTypeOf(r)===recipeCat);
-  if(q)list=list.filter(r=>normJa([r.name,r.yomi,r.steps,r.seasoning,r.garnish].join(' ')).includes(q));
-  const manual=recipeSort==='manual'&&!q;
+  if(recipeSubcat==='none')list=list.filter(r=>!(r.category||''));
+  else if(recipeSubcat!=='all')list=list.filter(r=>(r.category||'')===recipeSubcat);
+  if(q)list=list.filter(r=>normJa([r.name,r.yomi,r.category,r.steps,r.seasoning,r.garnish].join(' ')).includes(q));
+  const manual=recipeSort==='manual'&&!q&&recipeSubcat==='all'; // 並べ替えは「すべて」表示のときだけ（部分表示中は順番が壊れるため）
   if(q&&list.length===0&&recipes.length){
     document.getElementById('recipeList').innerHTML='<div class="empty">「'+esc(document.getElementById('rSearch').value.trim())+'」に一致するレシピはありません。</div>';
     return;
   }
   if(!q&&list.length===0&&recipes.length){
-    document.getElementById('recipeList').innerHTML='<div class="empty">'+(recipeCat==='drink'
+    document.getElementById('recipeList').innerHTML='<div class="empty">'+(recipeSubcat!=='all'
+      ?'このカテゴリーのレシピはまだありません。<br>レシピの編集画面で「カテゴリー」を選ぶとここに表示されます。'
+      :(recipeCat==='drink'
       ?'まだドリンクのレシピがありません。<br>下の「＋ レシピを登録」から追加してください。'
-      :'まだフードのレシピがありません。<br>下の「＋ レシピを登録」から追加してください。')+'</div>';
+      :'まだフードのレシピがありません。<br>下の「＋ レシピを登録」から追加してください。'))+'</div>';
     return;
   }
   document.getElementById('recipeList').innerHTML=list.map((r,i)=>{
@@ -1657,7 +1715,7 @@ function renderRecipes(){
     return `<div class="rcard" onclick="openRecipeDetail('${r.id}')">
       ${thumb}
       <div class="meta">
-        <h3>${esc(r.name)}</h3>
+        <h3>${esc(r.name)}${r.category?`<span class="catchip">${esc(r.category)}</span>`:''}</h3>
         ${r.yomi?`<div class="y">${esc(r.yomi)}</div>`:''}
         <div class="ex">${esc(ex)}</div>
       </div>${mv}
@@ -1685,7 +1743,7 @@ function openRecipeDetail(id){
     photos.map(p=>`<figure><img src="${escA(p.url)}" onclick="lightbox('${escA(p.url)}')"><figcaption>${esc(p.caption||'')}</figcaption></figure>`).join('')
   }</div></div>`:'';
   document.getElementById('recipeDetail').innerHTML=`
-    <h2 class="sec" style="font-size:20px">${esc(r.name)}</h2>
+    <h2 class="sec" style="font-size:20px">${esc(r.name)}${r.category?`<span class="catchip" style="font-size:12px;vertical-align:3px">${esc(r.category)}</span>`:''}</h2>
     ${hero}
     ${sec('調理手順',r.steps)}
     ${sec('調味料',r.seasoning)}
@@ -1708,6 +1766,8 @@ function openRecipeForm(id){
   const r=id?recipes.find(x=>x.id===id):null;
   rf_name.value=r?r.name:'';rf_yomi.value=r?r.yomi:'';
   document.getElementById('rf_type').value=r?recipeTypeOf(r):recipeCat;
+  // 新規登録時は、いま絞り込み中のカテゴリーをあらかじめ選んでおく
+  fillRecipeCatSel(r?recipeTypeOf(r):recipeCat, r?(r.category||''):(recipeSubcat!=='all'&&recipeSubcat!=='none'?recipeSubcat:''));
   rf_steps.value=r?r.steps:'';rf_seasoning.value=r?r.seasoning:'';rf_garnish.value=r?r.garnish:'';
   draftRecipe={
     heroUrl:r?r.hero_url:'', heroBlob:null, heroPreview:'',
@@ -1777,6 +1837,9 @@ async function saveRecipe(){
   try{
     const base={name,yomi:rf_yomi.value.trim(),rtype:document.getElementById('rf_type').value||'food',
       steps:rf_steps.value.trim(),seasoning:rf_seasoning.value.trim(),garnish:rf_garnish.value.trim()};
+    const catVal=document.getElementById('rf_cat').value||'';
+    if(recipeHasCategory)base.category=catVal;
+    else if(catVal){alert('※カテゴリーを保存するには、Supabaseで supabase_update_20260805.sql を実行してください。\n（今回はカテゴリー以外の内容を保存します）');}
     let id=recipeEditId;
     if(!id){
       const maxo=recipes.reduce((m,r)=>Math.max(m,r.sort_order||0),0);
@@ -1845,6 +1908,7 @@ async function loadMenus(){
       if(!r2.error)rows=r2.data||[];
     }
     items=rows.sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    if(rows.length)menuHasManualG=('manual_g' in rows[0]); // 列が無ければSQL未実行
     menuLoaded=true;
     cacheMenu();
     setMConn('on','🟢 オンライン共有中（変更は全端末に反映されます）');
@@ -1878,7 +1942,15 @@ function calc(it){
 function rateClass(r){return r<30?'ok':r<40?'warn':'bad';}
 
 let menuSort=localStorage.getItem('menu_sortmode')||'manual';
-function setMenuSort(m){menuSort=m;localStorage.setItem('menu_sortmode',m);render();}
+let menuHasManualG=true; // DBにmanual_g列があるか（無ければ supabase_update_20260805.sql 未実行）
+let menuReorder=false;   // ⇅ 並べ替えモード（名前だけのコンパクト表示）
+function setMenuSort(m){menuSort=m;menuReorder=false;localStorage.setItem('menu_sortmode',m);render();}
+function toggleMenuReorder(){
+  menuReorder=!menuReorder;
+  if(menuReorder){menuSort='manual';localStorage.setItem('menu_sortmode','manual');} // 並べ替え＝手動順が前提
+  render();
+  if(menuReorder)window.scrollTo(0,0);
+}
 function sortedItems(){
   const arr=items.map((it,idx)=>({it,idx}));
   if(menuSort==='kana')arr.sort((a,b)=>String(a.it.menu||'').localeCompare(String(b.it.menu||''),'ja'));
@@ -1923,19 +1995,38 @@ function renderMenuSummary(){
 }
 function render(){
   updateTabCounts();
-  renderMenuSummary();
   const box=document.getElementById('itemList');
   document.getElementById('emptyMsg').style.display=items.length?'none':'block';
-  document.getElementById('exportBtn').style.display=items.length?'block':'none';
   const sb=document.getElementById('menuSortbar');
   if(sb)sb.style.display=items.length?'flex':'none';
-  const kb=document.getElementById('mSortKana'),mb=document.getElementById('mSortManual');
-  if(kb)kb.classList.toggle('on',menuSort==='kana');
-  if(mb)mb.classList.toggle('on',menuSort==='manual');
+  const kb=document.getElementById('mSortKana'),mb=document.getElementById('mSortManual'),rb=document.getElementById('mSortReorder');
+  if(kb)kb.classList.toggle('on',menuSort==='kana'&&!menuReorder);
+  if(mb)mb.classList.toggle('on',menuSort==='manual'&&!menuReorder);
+  if(rb){rb.classList.toggle('on',menuReorder);rb.textContent=menuReorder?'✔ 並べ替え完了':'⇅ 並べ替え';}
+  // ⇅ 並べ替えモード＝名前だけのコンパクト一覧（大きいカードを何度もスクロールしなくて済む）
+  if(menuReorder){
+    document.getElementById('menuSummary').style.display='none';
+    document.getElementById('exportBtn').style.display='none';
+    box.innerHTML='<div class="note" style="margin:0 0 8px">▲▼で順番を入れ替えて、終わったら上の「✔ 並べ替え完了」を押してください。</div>'+
+      items.map((it,i)=>`<div class="reo">
+        <span class="no">${i+1}</span><span class="nm">${esc(it.menu||'(名称なし)')}</span>
+        <span class="mv">
+          <button onclick="moveMenu(${i},-1)" ${i===0?'disabled':''}>▲</button>
+          <button onclick="moveMenu(${i},1)" ${i===items.length-1?'disabled':''}>▼</button>
+        </span>
+      </div>`).join('');
+    return;
+  }
+  renderMenuSummary();
+  document.getElementById('exportBtn').style.display=items.length?'block':'none';
   box.innerHTML='';
   const manual=menuSort==='manual';
   sortedItems().forEach(({it,idx:i})=>{
     const c=calc(it);
+    const mg=menuUnitGrams(it);
+    const gramVal=(mg.g>0?`約${Math.round(mg.g)}g`:'')+(mg.ml>0?`${mg.g>0?' + ':''}約${Math.round(mg.ml)}ml`:'');
+    const gramRow=gramVal?`<div class="kv"><span>1人前の量${mg.manual?'（手動入力）':''}</span><b>${gramVal}</b></div>`:'';
+    const gramSkip=(!mg.manual&&mg.skip.length)?`<div class="note" style="margin-top:6px">⚠ ${mg.skip.map(esc).join('・')} はg換算できないため量に未算入。編集で「1人前の量」を手動入力すると、コースの量計算が正確になります。</div>`:'';
     let iglist='';
     it.ings.forEach(g=>{
       const q=(g.mode==='direct')?'1食分':`${g.use}${g.unit}`;
@@ -1955,7 +2046,9 @@ function render(){
         <div class="big ${c.profit<0?'neg':''}"><span>売価 ${yen(it.price)} の粗利</span><b>${yen(c.profit)}</b></div>
         <div class="kv"><span>合計原価(税込・食材${it.ings.length}品)</span><b>${yen(c.unitCost)}</b></div>
         <div class="kv"><span>原価率</span><b><span class="rate ${rateClass(c.rate)}">${c.rate.toFixed(1)}%</span></b></div>
+        ${gramRow}
       </div>
+      ${gramSkip}
       <table><tr><th>割引</th><th>販売価格</th><th>その時の粗利</th><th>原価率</th></tr>${rows}</table>
       <button class="btn sub" style="margin-top:12px" onclick="openForm(${i})">編集する</button>`;
     box.appendChild(el);
@@ -2029,6 +2122,17 @@ function recalcForm(){
   const pf=document.getElementById('f_profit');
   pf.textContent=yen(price-total);
   pf.style.color=(price-total)<0?'var(--red)':'var(--green)';
+  // 1人前の量：自動計算の内訳と、手動入力した時どうなるかを表示
+  const gn=document.getElementById('f_gram_note');
+  if(gn){
+    const auto=menuUnitGrams({ings:draftIngs});
+    const manual=+document.getElementById('f_manual_g').value||0;
+    const autoTxt=(auto.g>0?`約${Math.round(auto.g)}g`:'')+(auto.ml>0?`${auto.g>0?' + ':''}約${Math.round(auto.ml)}ml`:'')||'0g';
+    const skipTxt=auto.skip.length?`（${auto.skip.join('・')} はg換算できず未算入）`:'';
+    gn.innerHTML=manual>0
+      ?`食材からの自動計算は ${autoTxt}${skipTxt} → コースの量計算には手動入力の <b>${manual}g</b> を使います`
+      :`いまの自動計算: ${autoTxt}${skipTxt}${auto.skip.length?'<br><b>個数もの・直接入力の食材があるメニューは、ここに1人前の総量(g)を入れると正確になります</b>':''}`;
+  }
 }
 function openForm(i){
   editIndex=(typeof i==='number')?i:-1;
@@ -2037,9 +2141,11 @@ function openForm(i){
   if(editIndex>=0){
     const it=items[editIndex];
     f_menu.value=it.menu;f_price.value=it.price;
+    document.getElementById('f_manual_g').value=(+it.manual_g>0)?+it.manual_g:'';
     draftIngs=JSON.parse(JSON.stringify(it.ings));
   }else{
     f_menu.value='';f_price.value='';
+    document.getElementById('f_manual_g').value='';
     draftIngs=[{food:'',cost:'',taxrate:8,qty:'',unit:'g',use:'',mode:'split',direct:'',dtax:'incl'}];
   }
   renderIngs();showPage('form');
@@ -2050,18 +2156,23 @@ async function saveItem(){
   const ings=draftIngs.filter(g=>g.food||g.cost||g.use||g.direct);
   if(ings.length===0){alert('食材を1つ以上入れてください');return;}
   const price=+f_price.value||0;
+  const manual_g=+document.getElementById('f_manual_g').value||0;
+  if(!menuHasManualG&&manual_g>0){
+    alert('※「1人前の量」を保存するには、Supabaseで supabase_update_20260805.sql を実行してください。\n（今回は量以外の内容を保存します）');
+  }
+  const extra=menuHasManualG?{manual_g}:{};
   if(!db){ // オフライン：この端末の控えだけ更新
-    if(editIndex>=0)items[editIndex]={...items[editIndex],menu,price,ings};
-    else items.push({menu,price,ings});
+    if(editIndex>=0)items[editIndex]={...items[editIndex],menu,price,ings,manual_g};
+    else items.push({menu,price,ings,manual_g});
     cacheMenu();closeForm();render();return;
   }
   if(editIndex>=0 && items[editIndex] && items[editIndex].id){
     const {error}=await db.from('inv_menus')
-      .update({menu,price,ings,updated_at:new Date().toISOString()}).eq('id',items[editIndex].id);
+      .update({menu,price,ings,...extra,updated_at:new Date().toISOString()}).eq('id',items[editIndex].id);
     if(error){console.error(error);alert('保存に失敗しました（通信を確認してください）');return;}
   }else{
     const maxo=items.reduce((m,it)=>Math.max(m,it.sort_order||0),0);
-    const {error}=await db.from('inv_menus').insert({menu,price,ings,sort_order:maxo+10});
+    const {error}=await db.from('inv_menus').insert({menu,price,ings,...extra,sort_order:maxo+10});
     if(error){console.error(error);alert('保存に失敗しました（通信を確認してください）');return;}
   }
   closeForm();await loadMenus();
@@ -2100,6 +2211,8 @@ function menuUnitGrams(it){
     else if(u==='ml')ml+=v;
     else skip.push(`${x.food||'食材'}(${u})`);
   });
+  // 手動入力があればそれを優先（個数・直接入力ぶんも込みの「1人前の量」として扱う）
+  if(+it.manual_g>0)return{g:+it.manual_g,ml,skip:[],manual:true};
   return{g,ml,skip};
 }
 /* 宴会コースの一般的な目安=料理の総量400〜500g/人でお腹いっぱい */
@@ -2251,6 +2364,10 @@ function renderCourseForm(){
     return `<div class="pickcard">
       <div class="pickrow" style="border-bottom:none;padding:0 0 4px">
         <span class="nm">${esc(nm)}<span class="sub2">1人前 ${yen(uc)}${mg.g>0?`・約${Math.round(mg.g)}g`:''}${mg.ml>0?`・約${Math.round(mg.ml)}ml`:''} ／ ${crsSimN}人だと ${p}人前 = ${yen(uc*p)}${mg.g>0?`・約${Math.round(mg.g*p)}g`:''}</span></span>
+        <span class="mvc">
+          <button onclick="moveCourseItem(${i},-1)" ${i===0?'disabled':''}>▲</button>
+          <button onclick="moveCourseItem(${i},1)" ${i===draftCourse.items.length-1?'disabled':''}>▼</button>
+        </span>
         <button class="rmv" onclick="removeCourseItem(${i})">✕</button>
       </div>
       <div class="svrow">${svSel}${ratioSel}${fixSel}${perSel}</div>
@@ -2284,6 +2401,13 @@ function addCourseItem(id){
   renderCourseForm();
 }
 function removeCourseItem(i){draftCourse.items.splice(i,1);renderCourseForm();}
+/* コース内の品の順番を入れ替え（提供順に並べられる。保存でそのまま共有される） */
+function moveCourseItem(i,dir){
+  const j=i+dir;
+  if(j<0||j>=draftCourse.items.length)return;
+  [draftCourse.items[i],draftCourse.items[j]]=[draftCourse.items[j],draftCourse.items[i]];
+  renderCourseForm();
+}
 function setCourseItemSv(i,v){if(draftCourse.items[i]){draftCourse.items[i].sv=v;renderCourseForm();}}
 function setCourseItemRatio(i,v){if(draftCourse.items[i]){draftCourse.items[i].ratio=+v||0.7;renderCourseForm();}}
 function setCourseItemFix(i,v){if(draftCourse.items[i]){draftCourse.items[i].fix=+v||1;renderCourseForm();}}
