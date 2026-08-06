@@ -356,6 +356,27 @@ textarea:focus{border-color:var(--blue);background:#fff}
   border-radius:999px;border:1.5px solid var(--line);background:#fff;color:var(--navy)}
 .res_pastbtn{width:100%;margin-top:10px;padding:10px;font-size:13px;font-weight:800;border-radius:12px;
   border:1.5px dashed var(--line);background:#fff;color:var(--sub)}
+/* ---- 予約ミニカレンダー（予約のある日を赤く表示） ---- */
+.rescal{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:12px}
+.rc_head{display:flex;align-items:center;gap:6px}
+.rc_head b{flex:1 1 auto;text-align:center;font-size:15px;font-weight:800;color:var(--navy)}
+.rc_head button{flex:0 0 auto;padding:7px 12px;font-size:13px;font-weight:800;border-radius:10px;
+  border:1.5px solid var(--line);background:#fff;color:var(--navy)}
+.rc_head .rc_close{font-size:11px;color:var(--sub);padding:7px 9px}
+.rc_grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px}
+.rc_w{font-size:11px;font-weight:800;color:var(--sub);text-align:center;padding:2px 0}
+.rc_w.sun{color:var(--red)}.rc_w.sat{color:var(--blue)}
+.rc_day{min-height:42px;border-radius:9px;background:#f3f6fa;border:2px solid transparent;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;padding:2px 0}
+.rc_day.blank{background:transparent;cursor:default}
+.rc_day .n{font-size:9.5px;font-weight:800;line-height:1}
+.rc_day.has{background:var(--red);color:#fff}
+.rc_day.has.past{background:#e5b0a9}
+.rc_day.today .d{text-decoration:underline;text-underline-offset:2px}
+.rc_day.sel{border-color:var(--navy)}
+.rc_note{font-size:11.5px;color:var(--sub);margin-top:8px;line-height:1.6}
+
 /* 予約⇄シフトの相互表示カード */
 .xlink{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:12px}
 .xlink.sft{border-left:6px solid var(--green)}
@@ -848,6 +869,8 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <button onclick="resShiftDate(1)">▶</button>
     <button onclick="resGoToday()">今日</button>
   </div>
+  <!-- 予約のある日が赤く出るミニカレンダー（オーナーのみ） -->
+  <div id="resCal" class="rescal hide"></div>
   <div id="resTodayBar" class="res_today hide"></div>
   <!-- 同じ日のシフト（出勤）を小さく表示＝シフトタブへジャンプ可 -->
   <div id="resXlink"></div>
@@ -3520,6 +3543,66 @@ function renderResListMode(owner){
   if(resListPast)html+=`<button class="res_pastbtn" onclick="resTogglePast()">過去分を隠す</button>`;
   document.getElementById('resList').innerHTML=html;
 }
+/* ============================================================
+   予約ミニカレンダー（オーナーの「日ごと」表示用）
+   ・予約が入っている日は赤＝件数つきでひと目でわかる
+   ・日をタップするとその日の予約が下に表示される
+   ============================================================ */
+let resCalYM=null, resCalSel=null;
+let resCalOpen=localStorage.getItem('res_cal_open')!=='0';
+function resCalToggle(){
+  resCalOpen=!resCalOpen;localStorage.setItem('res_cal_open',resCalOpen?'1':'0');
+  renderResCal(resCalSel,true);
+}
+function resCalMove(d){
+  const [y,m]=resCalYM.split('-').map(Number);
+  const nd=new Date(y,m-1+d,1);
+  resCalYM=`${nd.getFullYear()}-${String(nd.getMonth()+1).padStart(2,'0')}`;
+  renderResCal(resCalSel,true);
+}
+function resCalPick(ymd){
+  document.getElementById('res_date').value=ymd;
+  renderReservations();
+}
+function renderResCal(selDay,keepMonth){
+  const box=document.getElementById('resCal');
+  if(!box)return;
+  if(!selDay){box.classList.add('hide');return;}
+  box.classList.remove('hide');
+  if(!keepMonth||!resCalYM)resCalYM=selDay.slice(0,7);
+  resCalSel=selDay;
+  if(!resCalOpen){
+    box.innerHTML=`<div class="rc_head"><b style="text-align:left">📆 予約カレンダー</b>
+      <button class="rc_close" onclick="resCalToggle()">ひらく ▼</button></div>`;
+    return;
+  }
+  const [y,m]=resCalYM.split('-').map(Number);
+  const firstW=new Date(y,m-1,1).getDay(), days=new Date(y,m,0).getDate();
+  const today=todayStr();
+  const cnt={};
+  reservations.forEach(r=>{
+    if((r.reserve_on||'').slice(0,7)===resCalYM)cnt[r.reserve_on]=(cnt[r.reserve_on]||0)+1;
+  });
+  const w=['日','月','火','水','木','金','土'];
+  let cells=w.map((x,i)=>`<div class="rc_w${i===0?' sun':i===6?' sat':''}">${x}</div>`).join('');
+  for(let i=0;i<firstW;i++)cells+=`<div class="rc_day blank"></div>`;
+  const p=n=>String(n).padStart(2,'0');
+  for(let d=1;d<=days;d++){
+    const ymd=`${y}-${p(m)}-${p(d)}`;
+    const c=cnt[ymd]||0;
+    const cls='rc_day'+(c?(ymd<today?' has past':' has'):'')
+      +(ymd===resCalSel?' sel':'')+(ymd===today?' today':'');
+    cells+=`<div class="${cls}" onclick="resCalPick('${ymd}')"><span class="d">${d}</span>${c?`<span class="n">${c}件</span>`:''}</div>`;
+  }
+  box.innerHTML=`<div class="rc_head">
+      <button onclick="resCalMove(-1)">◀</button>
+      <b>${y}年${m}月</b>
+      <button onclick="resCalMove(1)">▶</button>
+      <button class="rc_close" onclick="resCalToggle()">たたむ ▲</button>
+    </div>
+    <div class="rc_grid">${cells}</div>
+    <div class="rc_note">🟥 赤い日＝予約あり（数字は件数・うすい赤は過去の分）。日をタップするとその日の予約が下に出ます。</div>`;
+}
 function renderReservations(){
   updateTabCounts();
   const owner=resIsOwner();
@@ -3533,7 +3616,8 @@ function renderReservations(){
   const dateEl=document.getElementById('res_date');
   if(owner&&!dateEl.value)dateEl.value=todayStr();
   if(listMode){
-    // 一覧モード：仕込みまとめ・出勤カード(日別専用)とロック画面は出さない
+    // 一覧モード：カレンダー・仕込みまとめ・出勤カード(日別専用)とロック画面は出さない
+    renderResCal(null);
     document.getElementById('resLocked').style.display='none';
     document.getElementById('resPrep').innerHTML='';
     document.getElementById('resXlink').innerHTML='';
@@ -3541,6 +3625,8 @@ function renderReservations(){
     return;
   }
   const day=owner?(dateEl.value||todayStr()):todayStr();
+  // カレンダーはオーナーのみ（バイトには他の日の予約データがそもそも届かないため）
+  renderResCal(owner?day:null);
   const list=resOfDay(day);
   // 16時前はサーバーが本日分を渡さないので list は空になる（＝ロック画面）
   const locked=!owner&&!resIsOpenNow()&&!list.length;
