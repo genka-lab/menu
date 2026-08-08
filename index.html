@@ -544,6 +544,26 @@ textarea:focus{border-color:var(--blue);background:#fff}
 .rv_sample .q{color:#555;white-space:pre-wrap}
 .rv_sample .a{color:#1f5fb0;white-space:pre-wrap;margin-top:6px;border-top:1px dashed #ddd;padding-top:6px}
 .rv_sample .del{font-size:12px;color:#c0392b;background:none;border:none;margin-top:6px;padding:0}
+
+/* ===== 📝発注リスト（キッチン→オーナーLINE） ===== */
+.ordrow{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-left:6px solid var(--greenline);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.ordrow.yellow{border-left-color:#f0c948}
+.ordrow.red{border-left-color:#e57373}
+.ordrow.on{background:#f0f6ff;border-color:#9db8d8}
+.ord_info{flex:1;min-width:0}
+.ord_name{margin:0;font-size:14px;font-weight:700}
+.ord_sub{font-size:11px;color:var(--sub);margin-top:2px}
+.ord_step{display:flex;align-items:center;gap:6px}
+.ord_step button{width:42px;height:42px;border-radius:12px;border:1.5px solid var(--line);background:#fff;color:var(--navy);font-size:20px;font-weight:800}
+.ord_step button.plus{background:var(--navy);color:#fff;border-color:var(--navy)}
+.ord_step b{min-width:34px;text-align:center;font-size:18px;color:#b0b6bf}
+.ord_step b.on{color:var(--navy)}
+.ord_x{width:36px;height:36px;border-radius:10px;border:1.5px solid var(--line);background:#fff;color:#c0392b;font-weight:700}
+.ordpre{background:#f6f8fa;border:1px solid var(--line);border-radius:10px;padding:12px;font-size:13px;line-height:1.7;white-space:pre-wrap;word-break:break-all;font-family:inherit;margin:0}
+.ord_addrow{display:flex;gap:8px;align-items:center;margin-top:4px}
+.ord_addrow input{flex:1;margin:0}
+.ord_addrow button{flex:0 0 auto;padding:12px 16px;font-size:14px;font-weight:700;border-radius:10px;border:1.5px dashed var(--green);background:#fff;color:var(--green)}
+.btn:disabled{opacity:.4}
 </style>
 </head>
 <body>
@@ -574,6 +594,7 @@ textarea:focus{border-color:var(--blue);background:#fff}
 
 <div class="tabs">
   <div class="tab active" data-tab="stock" onclick="switchTab('stock')">📦在庫<span class="cnt" id="cnt-stock"></span></div>
+  <div class="tab" data-tab="order" onclick="switchTab('order')">📝発注<span class="cnt" id="cnt-order"></span></div>
   <div class="tab" data-tab="recipe" onclick="switchTab('recipe')">📖レシピ<span class="cnt" id="cnt-recipe"></span></div>
   <div class="tab" data-tab="list" onclick="switchTab('list')">🍽メニュー<span class="cnt" id="cnt-list"></span></div>
   <div class="tab" data-tab="course" onclick="switchTab('course')">🍱コース<span class="cnt" id="cnt-course"></span></div>
@@ -613,6 +634,35 @@ textarea:focus{border-color:var(--blue);background:#fff}
     <summary>🕘 みんなの操作履歴</summary>
     <div id="feed" class="feed"></div>
   </details>
+</div>
+
+<!-- ========== 📝発注リスト（＋−で個数→LINEでオーナーへ送信） ========== -->
+<div id="tab-order" class="wrap hide">
+  <div class="card">
+    <h2 class="sec">📝 発注リスト</h2>
+    <div class="note" style="font-size:12px;line-height:1.7">
+      ＋−で個数を入れて、一番下の「LINEで送る」を押してください。<br>
+      文面ができた状態でLINEが開くので、<b>送り先（オーナー）を選んで送信</b>するだけです。<br>
+      ※途中で閉じても入れた個数はこの端末に残ります。
+    </div>
+  </div>
+  <div id="ordList"></div>
+  <div class="card">
+    <h2 class="sec">✏️ リストにない品を追加</h2>
+    <div id="ordExtraList"></div>
+    <div class="ord_addrow">
+      <input id="ord_extra_name" placeholder="例：割り箸／米10kg">
+      <button onclick="ordAddExtra()">＋ 追加</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2 class="sec">📄 送る文面（プレビュー）</h2>
+    <pre id="ordPreview" class="ordpre"></pre>
+    <button class="btn" id="ordSendBtn" onclick="ordSendLine()">📱 LINEで送る</button>
+    <button class="btn sub" id="ordCopyBtn" onclick="ordCopy()">📋 文面をコピー（LINEに貼る用）</button>
+    <button class="btn sub" onclick="ordClear()">🗑 個数を全部0にもどす</button>
+    <div class="note">パソコンでLINEが開かない時は「文面をコピー」を使ってください。</div>
+  </div>
 </div>
 
 <!-- ========== 食材登録/編集フォーム ========== -->
@@ -1440,6 +1490,8 @@ function updateTabCounts(){
   setTabCount('cnt-shift',(typeof shifts!=='undefined'?sftOfDay(todayStr()).length:0));
   // 口コミは「まだ投稿していない分」の件数
   setTabCount('cnt-review',(typeof reviews!=='undefined'?reviews.filter(r=>r.status!=='posted').length:0));
+  // 発注は「個数を入れた品」の件数（送り忘れ防止）
+  setTabCount('cnt-order',(typeof ordCount==='function'?ordCount():0));
 }
 function renderInventory(){
   updateTabCounts();
@@ -1486,6 +1538,8 @@ function renderInventory(){
       </div>
     </div>`;
   }).join('');
+  // 発注タブを開いたまま在庫が更新されたら、発注リストも追従
+  if(typeof currentTab!=='undefined'&&currentTab==='order'&&typeof renderOrder==='function')renderOrder();
 }
 
 function renderFeed(){
@@ -4310,10 +4364,117 @@ setInterval(sftTick,30000);
 
 /* ---- タブ/ページ ---- */
 let currentTab='stock';
+/* =====================================================
+   📝発注リスト（キッチン→オーナーLINE）
+   ・在庫タブの食材が候補として並ぶ（🔴→🟡→🟢の順）
+   ・＋−で個数を入れ「LINEで送る」→ 文面入りでLINEの
+     共有画面が開く。送り先(オーナー)を選んで送信するだけ
+   ・下書きはこの端末のlocalStorageに自動保存
+   ・在庫数はあくまで参考表示。個数は必ず人が決める
+===================================================== */
+let ordDraft={q:{},ex:[]};
+try{const s=JSON.parse(localStorage.getItem('ord_draft')||'null');if(s&&s.q&&Array.isArray(s.ex))ordDraft=s;}catch(e){}
+function ordSave(){localStorage.setItem('ord_draft',JSON.stringify(ordDraft));}
+function ordCount(){
+  let n=Object.entries(ordDraft.q).filter(([id,q])=>+q>0&&ingredients.some(g=>g.id===id)).length;
+  n+=ordDraft.ex.filter(e=>+e.qty>0).length;
+  return n;
+}
+function ordSorted(){
+  const rank={red:0,yellow:1,green:2};
+  return [...ingredients].sort((a,b)=>{
+    const ra=rank[statusOf(a)],rb=rank[statusOf(b)];
+    return ra!==rb?ra-rb:(+a.stock)-(+b.stock);
+  });
+}
+function ordInc(id){ordDraft.q[id]=(+ordDraft.q[id]||0)+1;ordSave();renderOrder();}
+function ordDec(id){ordDraft.q[id]=Math.max(0,(+ordDraft.q[id]||0)-1);ordSave();renderOrder();}
+function ordExInc(i){ordDraft.ex[i].qty=+ordDraft.ex[i].qty+1;ordSave();renderOrder();}
+function ordExDec(i){ordDraft.ex[i].qty=Math.max(0,+ordDraft.ex[i].qty-1);ordSave();renderOrder();}
+function ordExDel(i){ordDraft.ex.splice(i,1);ordSave();renderOrder();}
+function ordAddExtra(){
+  const inp=document.getElementById('ord_extra_name');
+  const name=(inp.value||'').trim();
+  if(!name){alert('品名を入れてください（例：割り箸）');return;}
+  ordDraft.ex.push({name,qty:1});inp.value='';ordSave();renderOrder();
+}
+function ordText(){
+  const d=new Date();
+  const lines=[`📝発注リスト ${d.getMonth()+1}/${d.getDate()}(${'日月火水木金土'[d.getDay()]})`];
+  ordSorted().forEach(g=>{
+    const q=+ordDraft.q[g.id]||0;
+    if(q>0)lines.push(`・${g.name} × ${q}${g.unit_name||''}`);
+  });
+  ordDraft.ex.forEach(e=>{if(+e.qty>0)lines.push(`・${e.name} × ${+e.qty}`);});
+  lines.push(`以上 ${ordCount()}品`+(getOperator()?`（記入：${getOperator()}）`:''));
+  return lines.join('\n');
+}
+function renderOrder(){
+  const box=document.getElementById('ordList');if(!box)return;
+  // 削除済み食材の下書きを掃除
+  Object.keys(ordDraft.q).forEach(id=>{if(!ingredients.some(g=>g.id===id))delete ordDraft.q[id];});
+  box.innerHTML=ingredients.length?ordSorted().map(g=>{
+    const st=statusOf(g);
+    const q=+ordDraft.q[g.id]||0;
+    const em={green:'🟢',yellow:'🟡',red:'🔴'}[st];
+    return `<div class="ordrow ${st}${q>0?' on':''}">
+      <div class="ord_info">
+        <p class="ord_name">${esc(g.name)}</p>
+        <div class="ord_sub">${em} 残り${(+g.stock)}${esc(g.unit_name)}${g.note?`　${esc(g.note)}`:''}</div>
+      </div>
+      <div class="ord_step">
+        <button onclick="ordDec('${g.id}')">−</button>
+        <b class="${q>0?'on':''}">${q}</b>
+        <button class="plus" onclick="ordInc('${g.id}')">＋</button>
+      </div>
+    </div>`;
+  }).join(''):'<div class="empty">まだ食材が登録されていません。<br>📦在庫タブで食材を登録すると、ここに発注の候補が並びます。</div>';
+  document.getElementById('ordExtraList').innerHTML=ordDraft.ex.map((e,i)=>{
+    const q=+e.qty;
+    return `<div class="ordrow${q>0?' on':''}">
+      <div class="ord_info"><p class="ord_name">${esc(e.name)}</p></div>
+      <div class="ord_step">
+        <button onclick="ordExDec(${i})">−</button>
+        <b class="${q>0?'on':''}">${q}</b>
+        <button class="plus" onclick="ordExInc(${i})">＋</button>
+      </div>
+      <button class="ord_x" onclick="ordExDel(${i})">✕</button>
+    </div>`;
+  }).join('');
+  const n=ordCount();
+  document.getElementById('ordPreview').textContent=n?ordText():'（まだ何も選ばれていません。＋を押すとここに文面が出ます）';
+  const sb=document.getElementById('ordSendBtn');
+  sb.textContent=n?`📱 LINEで送る（${n}品）`:'📱 LINEで送る';
+  sb.disabled=!n;
+  document.getElementById('ordCopyBtn').disabled=!n;
+  updateTabCounts();
+}
+function ordSendLine(){
+  if(!ordCount()){alert('＋ボタンで個数を入れてから送ってください');return;}
+  location.href='https://line.me/R/share?text='+encodeURIComponent(ordText());
+}
+async function ordCopy(){
+  if(!ordCount()){alert('＋ボタンで個数を入れてからコピーしてください');return;}
+  const t=ordText();
+  const done=()=>alert('文面をコピーしました。LINEを開いて貼り付けて送ってください');
+  try{await navigator.clipboard.writeText(t);done();}
+  catch(e){
+    const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();
+    try{document.execCommand('copy');done();}
+    catch(e2){alert('コピーできませんでした。プレビューを長押しして手動でコピーしてください');}
+    ta.remove();
+  }
+}
+function ordClear(){
+  if(!confirm('入れた個数と追加した品を全部消して、まっさらに戻しますか？'))return;
+  ordDraft={q:{},ex:[]};ordSave();renderOrder();
+}
+
 function switchTab(t){currentTab=t;
   document.querySelectorAll('.tab').forEach(el=>el.classList.toggle('active',el.dataset.tab===t));showPage(t);}
 function showPage(p){
   document.getElementById('tab-stock').classList.toggle('hide',p!=='stock');
+  document.getElementById('tab-order').classList.toggle('hide',p!=='order');
   document.getElementById('tab-recipe').classList.toggle('hide',p!=='recipe');
   document.getElementById('tab-list').classList.toggle('hide',p!=='list');
   document.getElementById('tab-course').classList.toggle('hide',p!=='course');
@@ -4344,6 +4505,7 @@ function showPage(p){
   if(p==='guide')renderGuide();
   if(p==='reserve')renderReservations();
   if(p==='shift')renderShifts();
+  if(p==='order')renderOrder();
   const fab=document.getElementById('fab');
   if(p==='stock'){fab.classList.remove('hide');fab.textContent='＋ 食材を登録';}
   else if(p==='recipe'){fab.classList.remove('hide');fab.textContent='＋ レシピを登録';}
