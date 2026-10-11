@@ -1300,8 +1300,8 @@ textarea:focus{border-color:var(--blue);background:#fff}
 
 <script>
 /* ============ 合言葉ロック ============ */
-/* 合言葉のSHA-256ハッシュ(本文に平文は書かない)。現在の仮合言葉: menu2026 */
-const PW_HASH="52c7c485d8dd2e0f708c8b2d116225fb8abdc21dd08ad6afcd6de0c85e60401e";
+/* 合言葉のSHA-256ハッシュ(本文に平文は書かない)。 */
+const PW_HASH="009a042910c1dc410d8643a7e15cdc097bd30d5b0564189d3c18047055c8b0a9";
 async function sha256(str){
   const buf=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
